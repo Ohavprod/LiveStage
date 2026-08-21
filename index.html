@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Live Stage Pro</title>
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Rubik', 'sans-serif'],
+            mono: ['Courier New', 'Courier', 'monospace'],
+          },
+          colors: {
+            stage: {
+              bg: '#0f172a', card: '#1e293b', hover: '#334155', border: '#334155', 
+              primary: '#6366f1', primaryLight: '#818cf8', secondary: '#38bdf8', 
+              text: '#f1f5f9', muted: '#94a3b8' 
+            }
+          },
+          screens: { 'xs': '400px' }
+        }
+      }
+    }
+  </script>
+  <style>
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    
+    html { background-color: #0f172a; background-image: linear-gradient(to bottom right, #0f172a, #1e1e2e); min-height: 100%; }
+    body { min-height: 100%; margin: 0; overflow-y: auto; overflow-x: hidden; font-family: 'Rubik', sans-serif; padding-bottom: 120px; }
+    body.modal-open { overflow: hidden; height: 100vh; position: fixed; width: 100%; }
+
+    .song-content { max-height: 0; overflow: hidden; transition: max-height 0.3s ease-out; }
+    .song-content.open { max-height: 8000px; } 
+    
+    .lyrics-area { 
+      line-height: 2; font-size: 1.4rem; font-weight: 500; color: #f1f5f9; 
+      text-align: right; direction: rtl; white-space: pre-wrap; font-family: 'Rubik', sans-serif;
+    }
+    @media (min-width: 768px) { .lyrics-area { font-size: 1.6rem; } }
+
+    .lyrics-area b, .lyrics-area strong { color: #38bdf8; font-weight: 900; }
+    .lyrics-area h1 { font-size: 1.5em; margin: 15px 0; color: #818cf8; text-align: center; }
+    .lyrics-area u { text-decoration-color: #38bdf8; text-decoration-thickness: 3px; }
+
+    .exact-chord-container {
+        font-family: 'Courier New', Courier, monospace !important;
+        font-size: 19px !important; line-height: 1.5 !important;
+        width: 100%; overflow-x: auto; direction: ltr !important; text-align: right !important; white-space: pre !important; 
+    }
+    .chord-line { font-family: inherit !important; color: #38bdf8; font-weight: 900; display: block; }
+    .lyric-line { font-family: inherit !important; color: #ffffff; font-weight: 700; opacity: 0.95; display: block; }
+    textarea.exact-chord-container { color: #f1f5f9; background-color: #1e293b; }
+
+    .editor-toolbar button { padding: 8px 14px; background: #334155; border-radius: 10px; font-size: 1rem; margin-left: 6px; color: #f1f5f9; }
+    #inLyricsDiv { color: #f1f5f9; font-size: 1.2rem; line-height: 1.6; text-align: right; white-space: pre-wrap; }
+    input, textarea { font-size: 16px !important; text-align: right; direction: rtl; } 
+    #inBpm, #inKey, #inTrans { direction: ltr; text-align: center; }
+    .input-dark { background-color: #1e293b; border: 1px solid #334155; color: #f1f5f9; }
+
+    .admin-controls { display: none !important; }
+    body.admin-active .admin-controls { display: flex !important; }
+    #addSongBtn { display: none; }
+    body.admin-active #addSongBtn { display: flex; }
+
+    .drag-handle { cursor: grab; touch-action: none; padding: 12px; color: #64748b; font-size: 1.5rem; }
+    .drag-handle:active { cursor: grabbing; color: #6366f1; }
+    .sortable-ghost { opacity: 0.2; background: #334155; }
+    .sortable-drag { background: #1e293b; cursor: grabbing; opacity: 1; border: 2px solid #6366f1; }
+
+    .cat-btn { background: #1e293b; color: #94a3b8; border: 1px solid #334155; padding: 8px 20px; border-radius: 999px; font-weight: 700; font-size: 1rem; transition: all 0.2s; white-space: nowrap; flex-shrink: 0; }
+    .cat-btn.active { background: #6366f1; color: white; border-color: #6366f1; box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4); transform: scale(1.05); }
+    
+    #loadingOverlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.8); z-index: 100; display: flex; justify-content: center; align-items: center; backdrop-filter: blur(5px); }
+    .spinner { width: 50px; height: 50px; border: 5px solid #334155; border-top: 5px solid #6366f1; border-radius: 50%; animation: spin 1s linear infinite; }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    .hidden-force { display: none !important; }
+
+    #autoScrollControl {
+        transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        transform: translateY(150%);
+    }
+    #autoScrollControl.active { transform: translateY(0); }
+    input[type=range] { -webkit-appearance: none; background: transparent; }
+    input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 20px; width: 20px; border-radius: 50%; background: #ffffff; cursor: pointer; margin-top: -8px; box-shadow: 0 0 10px rgba(0,0,0,0.5); }
+    input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; cursor: pointer; background: #4f46e5; border-radius: 2px; }
+
+  </style>
+</head>
+<body class="text-fuchsia-50 font-sans text-right" dir="rtl">
+
+  <div id="loadingOverlay" class="hidden-force"><div class="spinner"></div></div>
+
+  <div id="autoScrollControl" class="fixed bottom-6 left-4 right-4 md:left-1/3 md:right-1/3 bg-slate-800/95 backdrop-blur-lg p-3 rounded-full border border-indigo-500/50 flex gap-4 items-center shadow-2xl z-40">
+      <button onclick="toggleAutoScroll()" id="scrollPlayBtn" class="bg-indigo-600 hover:bg-indigo-500 text-white w-12 h-12 rounded-full flex items-center justify-center text-2xl shadow-lg transition active:scale-95 pl-1">▶</button>
+      <div class="flex-grow flex flex-col justify-center">
+          <div class="flex justify-between text-[10px] font-bold text-slate-400 mb-1 px-1"><span>איטי</span><span>מהירות</span><span>מהיר</span></div>
+          <input type="range" id="scrollSpeedSlider" min="1" max="50" value="10" class="w-full" oninput="updateScrollSpeed()">
+      </div>
+      <button onclick="stopScroll()" class="text-slate-400 hover:text-white text-2xl px-2">✕</button>
+  </div>
+
+  <header class="sticky top-0 z-50 bg-slate-900/95 border-b border-slate-700 p-3 shadow-lg rounded-b-2xl">
+    <div class="flex justify-between items-center mb-3">
+        <div class="flex flex-col items-start gap-1">
+          <h1 class="text-2xl font-black tracking-wide bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-sky-400 drop-shadow-sm leading-none">LIVE STAGE</h1>
+          <span id="syncStatus" class="text-[11px] font-bold uppercase tracking-widest text-slate-400">מתחבר...</span>
+        </div>
+        <div class="flex gap-2 items-center">
+          <button onclick="toggleAdminLock()" id="lockBtn" class="text-lg p-2 rounded-full hover:bg-white/10 transition text-slate-400" title="כניסת מנהל">🔒</button>
+          <button id="addSongBtn" onclick="openAddModal()" class="bg-gradient-to-l from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 text-white px-4 py-2 rounded-full text-sm font-bold shadow-glow transition active:scale-95 items-center gap-1"><span class="text-xl leading-none font-black">+</span> <span class="hidden xs:inline">שיר</span></button>
+          <button onclick="manualSync()" class="bg-slate-800 border border-slate-700 text-indigo-400 hover:bg-slate-700 active:bg-slate-900 w-10 h-10 rounded-full flex items-center justify-center transition shadow-sm">↻</button>
+        </div>
+    </div>
+    <div id="categoryFilterBar" class="flex gap-3 overflow-x-auto pb-2 px-1"><button class="cat-btn active">הכל</button></div>
+  </header>
+
+  <div id="passwordModal" class="hidden fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4 backdrop-blur-sm">
+      <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-2xl w-full max-w-xs text-center">
+          <h3 class="text-xl font-bold mb-4 text-indigo-400">כניסת מנהל</h3>
+          <input type="password" id="adminPass" placeholder="סיסמה" class="input-dark w-full rounded-xl p-3 mb-4 text-center dir-ltr">
+          <div class="flex gap-2 justify-center">
+              <button onclick="document.getElementById('passwordModal').classList.add('hidden')" class="text-slate-400 px-4 py-2">ביטול</button>
+              <button onclick="checkPassword()" class="bg-indigo-600 text-white px-6 py-2 rounded-xl font-bold">פתח</button>
+          </div>
+      </div>
+  </div>
+
+  <div id="modalForm" class="hidden fixed inset-0 bg-black/80 z-[60] flex items-end sm:items-center justify-center sm:p-4 backdrop-blur-sm transition-all">
+    <div class="bg-slate-800 w-full sm:max-w-2xl sm:rounded-3xl rounded-t-3xl p-6 shadow-2xl max-h-[85vh] overflow-y-auto flex flex-col relative text-right border border-slate-700">
+      <div class="flex justify-between items-center mb-5 flex-row-reverse">
+         <button onclick="closeModal()" class="text-slate-400 text-2xl p-2 hover:text-white transition bg-slate-700 rounded-full w-10 h-10 flex items-center justify-center">✕</button>
+         <h2 id="modalTitle" class="text-2xl font-bold text-indigo-400">עריכת שיר</h2>
+      </div>
+      <input type="hidden" id="editId">
+      <div class="space-y-4 flex-grow">
+        <input type="text" id="inTitle" placeholder="שם השיר" class="w-full input-dark rounded-xl p-3 outline-none text-lg font-bold transition">
+        
+        <div class="relative">
+            <input type="text" id="inCategory" list="categoryOptions" placeholder="קטגוריה (הפרד עם פסיק: חופה, קצבי)" class="w-full input-dark rounded-xl p-3 outline-none font-bold text-violet-400 placeholder-slate-500">
+            <datalist id="categoryOptions"></datalist>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+            <input type="text" id="inRhythm" placeholder="🎹 מקצב" class="input-dark rounded-xl p-3 outline-none font-bold text-yellow-400 placeholder-slate-500">
+            <input type="text" id="inPlayback" placeholder="🎵 קישור לפלייבק (דרייב)" class="input-dark rounded-xl p-3 outline-none font-bold text-green-400 placeholder-slate-500 dir-ltr text-left">
+        </div>
+        <input type="text" id="inYoutube" placeholder="📺 קישור יוטיוב" class="w-full input-dark rounded-xl p-3 outline-none font-bold text-red-400 placeholder-slate-500 dir-ltr text-left">
+
+        <div class="grid grid-cols-3 gap-3">
+          <input type="text" id="inBpm" placeholder="BPM" class="input-dark rounded-xl p-3 outline-none text-sm font-semibold">
+          <input type="text" id="inKey" placeholder="סולם" class="input-dark rounded-xl p-3 outline-none text-sm font-semibold">
+          <input type="text" id="inTrans" placeholder="טרנספוז'" class="input-dark rounded-xl p-3 outline-none text-sm font-semibold">
+        </div>
+        <textarea id="inNotes" rows="2" placeholder="📝 הערות..." class="input-dark w-full rounded-xl p-3 outline-none text-sm font-semibold"></textarea>
+        <div class="flex justify-center bg-slate-900 p-2 rounded-full mt-2 border border-slate-700 max-w-sm mx-auto">
+           <button type="button" onclick="setFormTab('lyrics')" id="btnFormLyrics" class="flex-1 py-2 rounded-full text-sm font-bold transition bg-indigo-600 text-white shadow-lg mx-1">מילים</button>
+           <button type="button" onclick="setFormTab('chords')" id="btnFormChords" class="flex-1 py-2 rounded-full text-sm font-bold transition text-slate-400 hover:text-white mx-1">אקורדים</button>
+        </div>
+        <div id="editorContainerLyrics" class="flex flex-col h-full">
+          <div class="editor-toolbar flex gap-1 mb-2 no-scrollbar" dir="ltr">
+            <button type="button" onclick="execCmd('bold')"><b>B</b></button>
+            <button type="button" onclick="execCmd('fontSize', '5')">A+</button>
+            <button type="button" onclick="execCmd('formatBlock', 'H1')">H1</button>
+            <button type="button" onclick="execCmd('underline')"><u>U</u></button>
+            <button type="button" onclick="execCmd('removeFormat')" title="נקה עיצוב">🧹</button>
+          </div>
+          <div id="inLyricsDiv" contenteditable="true" class="w-full input-dark rounded-xl p-4 outline-none flex-grow min-h-[150px] transition text-right overflow-y-auto" dir="rtl"></div>
+        </div>
+        <div id="editorContainerChords" class="hidden h-full">
+           <textarea id="inChords" class="input-dark rounded-xl p-3 outline-none h-[200px] exact-chord-container" placeholder="הדבק כאן..."></textarea>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-4 mt-6 pt-4 border-t border-slate-700">
+        <button onclick="closeModal()" class="text-slate-400 font-bold py-3 rounded-xl hover:bg-slate-700 transition">ביטול</button>
+        <button onclick="submitForm()" class="bg-gradient-to-l from-indigo-500 to-indigo-600 text-white font-bold py-3 rounded-xl shadow-glow active:from-indigo-700 transition">שמור</button>
+      </div>
+    </div>
+  </div>
+
+  <main id="playlist" class="p-3 max-w-3xl mx-auto space-y-4 mt-2 text-right">
+    <div class="text-center text-indigo-400 mt-20 animate-pulse text-lg font-bold tracking-wider">טוען נתונים...</div>
+  </main>
+
+  <script>
+    // ----------------------------------------------------
+    const API_URL = "https://script.google.com/macros/s/AKfycbzG6Vx09-qMR_EuLG0LfRIaIPMz2RJy0EAZ8MiAVvXeaz7seh5G7Elzlo-ZQ61crSrG/exec"; 
+    // ----------------------------------------------------
+
+    let allSongs = [];
+    let isAdmin = false; 
+    let currentCategory = 'הכל';
+    let sortableInstance = null;
+    
+    let scrollInterval = null;
+    let isScrolling = false;
+
+    window.onload = function() {
+        loadSongs();
+        document.getElementById('inLyricsDiv').addEventListener('paste', function(e) {
+            e.preventDefault();
+            var text = (e.originalEvent || e).clipboardData.getData('text/plain');
+            document.execCommand('insertText', false, text);
+        });
+    };
+
+    // --- NEW: Generate Embedded Player HTML ---
+    function getPlayerHtml(url) {
+        if (!url) return '';
+        
+        let driveId = null;
+        if (url.includes('drive.google.com') || url.includes('docs.google.com')) {
+            const match1 = url.match(/\/d\/(.+?)(\/|$)/);
+            const match2 = url.match(/id=(.+?)($|&)/);
+            if (match1) driveId = match1[1];
+            else if (match2) driveId = match2[1];
+        }
+
+        if (driveId) {
+            // שימוש בנגן המובנה של גוגל דרייב (iframe)
+            // זה הפתרון הכי יציב לקבצים בדרייב
+            return `
+            <div class="w-full mt-4 mb-2 bg-black/30 rounded-xl overflow-hidden border border-slate-600">
+                <iframe src="https://drive.google.com/file/d/${driveId}/preview" width="100%" height="100" style="border:none;"></iframe>
+            </div>`;
+        } else {
+            // נגן רגיל לקישורים ישירים (MP3 וכו')
+            return `
+            <div class="w-full mt-4 mb-2">
+                <audio controls class="w-full h-10 rounded-lg bg-slate-200" src="${url}"></audio>
+            </div>`;
+        }
+    }
+
+    // --- Auto Scroll Logic ---
+    function toggleAutoScroll() {
+        const btn = document.getElementById('scrollPlayBtn');
+        if (isScrolling) {
+            stopScrollLogic();
+            btn.innerHTML = '▶';
+            btn.classList.remove('bg-red-500', 'animate-pulse');
+            btn.classList.add('bg-indigo-600');
+        } else {
+            startScrollLogic();
+            btn.innerHTML = '⏸';
+            btn.classList.remove('bg-indigo-600');
+            btn.classList.add('bg-red-500', 'animate-pulse');
+        }
+        isScrolling = !isScrolling;
+    }
+
+    function startScrollLogic() {
+        clearInterval(scrollInterval);
+        const speedVal = parseInt(document.getElementById('scrollSpeedSlider').value);
+        const delay = 105 - (speedVal * 2); 
+        scrollInterval = setInterval(() => { window.scrollBy(0, 1); }, delay);
+    }
+
+    function stopScrollLogic() { clearInterval(scrollInterval); }
+    function updateScrollSpeed() { if (isScrolling) startScrollLogic(); }
+    
+    function stopScroll() {
+        stopScrollLogic();
+        isScrolling = false;
+        document.getElementById('scrollPlayBtn').innerHTML = '▶';
+        document.getElementById('scrollPlayBtn').classList.remove('bg-red-500', 'animate-pulse');
+        document.getElementById('scrollPlayBtn').classList.add('bg-indigo-600');
+    }
+
+    function toggleLoader(show) {
+        const loader = document.getElementById('loadingOverlay');
+        if(show) loader.classList.remove('hidden-force');
+        else loader.classList.add('hidden-force');
+    }
+
+    async function loadSongs() {
+      document.getElementById('syncStatus').innerText = 'טוען...';
+      try {
+          const res = await fetch(API_URL + "?action=read");
+          const data = await res.json();
+          allSongs = data;
+          renderCategoryButtons();
+          renderList();
+          const now = new Date();
+          document.getElementById('syncStatus').innerText = now.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+      } catch (e) {
+          console.error(e);
+          document.getElementById('syncStatus').innerText = 'שגיאה';
+      }
+    }
+    
+    function manualSync() { loadSongs(); }
+
+    async function sendData(action, payload) {
+        toggleLoader(true);
+        try {
+            const res = await fetch(API_URL, {
+                method: 'POST',
+                headers: { "Content-Type": "text/plain;charset=utf-8" },
+                body: JSON.stringify({ action: action, payload: payload })
+            });
+            const data = await res.json();
+            allSongs = data;
+            renderCategoryButtons();
+            renderList();
+        } catch(e) {
+            alert('שגיאת תקשורת');
+            console.error(e);
+        }
+        toggleLoader(false);
+    }
+
+    function toggleAdminLock() {
+        if (isAdmin) {
+            isAdmin = false;
+            document.body.classList.remove('admin-active');
+            document.getElementById('lockBtn').innerText = '🔒';
+            document.getElementById('lockBtn').classList.remove('text-indigo-400');
+            if(sortableInstance) sortableInstance.option("disabled", true);
+        } else {
+            document.getElementById('passwordModal').classList.remove('hidden');
+            document.getElementById('adminPass').value = '';
+            document.getElementById('adminPass').focus();
+        }
+    }
+
+    function checkPassword() {
+        const pass = document.getElementById('adminPass').value;
+        if (pass === 'Admin123') {
+            isAdmin = true;
+            document.body.classList.add('admin-active');
+            document.getElementById('lockBtn').innerText = '🔓'; 
+            document.getElementById('lockBtn').classList.add('text-indigo-400');
+            document.getElementById('passwordModal').classList.add('hidden');
+            if(sortableInstance) sortableInstance.option("disabled", false);
+        } else {
+            alert('סיסמה שגויה');
+        }
+    }
+
+    function execCmd(command, value = null) {
+      document.execCommand(command, false, value);
+      document.getElementById('inLyricsDiv').focus();
+    }
+
+    function renderCategoryButtons() {
+        const categories = new Set();
+        allSongs.forEach(s => {
+            if(s.category && s.category.trim() !== '') {
+                const parts = s.category.split(',');
+                parts.forEach(p => {
+                    if(p.trim() !== '') categories.add(p.trim());
+                });
+            }
+        });
+        const bar = document.getElementById('categoryFilterBar');
+        bar.innerHTML = ''; 
+        const allBtn = createCatBtn('הכל');
+        if(currentCategory === 'הכל') allBtn.classList.add('active');
+        allBtn.onclick = () => setCategory('הכל');
+        bar.appendChild(allBtn);
+        Array.from(categories).sort().forEach(cat => {
+            const btn = createCatBtn(cat);
+            if(currentCategory === cat) btn.classList.add('active');
+            btn.onclick = () => setCategory(cat);
+            bar.appendChild(btn);
+        });
+        const datalist = document.getElementById('categoryOptions');
+        datalist.innerHTML = '';
+        categories.forEach(cat => {
+            const opt = document.createElement('option');
+            opt.value = cat;
+            datalist.appendChild(opt);
+        });
+    }
+
+    function createCatBtn(text) {
+        const btn = document.createElement('button');
+        btn.innerText = text;
+        btn.className = 'cat-btn';
+        return btn;
+    }
+
+    function setCategory(cat) {
+        currentCategory = cat;
+        renderCategoryButtons(); 
+        renderList();
+    }
+
+    function renderList() {
+      const list = document.getElementById('playlist');
+      list.innerHTML = '';
+      
+      const filteredSongs = currentCategory === 'הכל' 
+          ? allSongs 
+          : allSongs.filter(s => {
+              if (!s.category) return false;
+              const cats = s.category.split(',').map(c => c.trim());
+              return cats.includes(currentCategory);
+          });
+
+      if(filteredSongs.length === 0) {
+        list.innerHTML = '<div class="text-center text-slate-400 mt-10 p-8 bg-slate-800/50 rounded-3xl border border-slate-700 shadow-soft">לא נמצאו שירים.</div>';
+        return;
+      }
+
+      filteredSongs.forEach((song, index) => {
+        const originalIndex = allSongs.findIndex(s => s.id === song.id); 
+        const displayIndex = index + 1;
+        const viewId = index; 
+
+        let catBadges = '';
+        if(song.category) {
+            catBadges = song.category.split(',').map(c => {
+                c = c.trim();
+                if(!c) return '';
+                return `<span class="bg-violet-600 text-white px-3 py-1 rounded-full shadow-md" dir="ltr">${c}</span>`;
+            }).join(' ');
+        }
+
+        const item = document.createElement('div');
+        item.setAttribute('data-id', song.id); 
+        item.className = "bg-slate-800 rounded-2xl overflow-hidden shadow-soft border border-slate-700 mb-3 transition-all hover:shadow-md hover:border-indigo-500/30";
+        
+        const formattedNotes = song.notes ? song.notes.replace(/\n/g, '<br>') : '';
+
+        // יצירת ה-HTML של הנגן במידה ויש קישור
+        const playerHtml = song.playback ? getPlayerHtml(song.playback) : '';
+
+        item.innerHTML = `
+          <div class="p-4 flex items-center justify-between cursor-pointer select-none relative active:bg-slate-700 transition" onclick="toggleSong(${viewId})">
+            <div class="flex items-center gap-4 overflow-hidden">
+               <div class="admin-controls drag-handle text-2xl select-none">⋮⋮</div>
+               <div class="text-indigo-400 font-black text-xl min-w-[24px] text-center">${displayIndex}</div>
+               <div class="flex-grow min-w-0 text-right">
+                 <div class="font-bold text-xl text-fuchsia-50 truncate leading-tight mb-2">${song.title}</div>
+                 <div class="flex flex-wrap gap-2 text-[12px] font-bold justify-start items-center">
+                    ${catBadges}
+                    ${song.bpm ? `<span class="bg-rose-600 text-white px-3 py-1 rounded-full shadow-md" dir="ltr">${song.bpm} BPM</span>` : ''}
+                    ${song.key ? `<span class="bg-indigo-600 text-white px-3 py-1 rounded-full shadow-md" dir="ltr">${song.key}</span>` : ''}
+                    ${song.trans ? `<span class="bg-orange-700 text-white px-3 py-1 rounded-full shadow-md border border-white/10" dir="ltr">${song.trans}</span>` : ''}
+                 </div>
+               </div>
+            </div>
+            <div class="admin-controls flex items-center gap-1 z-10 pr-2" onclick="event.stopPropagation()">
+               <button onclick="editSongSetup(${originalIndex})" class="w-10 h-10 flex items-center justify-center text-slate-400 hover:text-indigo-400 hover:bg-slate-700 rounded-full transition">✏️</button>
+               <button onclick="deleteSong('${song.id}')" class="w-10 h-10 flex items-center justify-center text-slate-400 hover:text-red-400 hover:bg-red-500/20 rounded-full transition">🗑️</button>
+            </div>
+          </div>
+
+          <div id="content-view-${viewId}" class="song-content bg-slate-900/50 border-t border-slate-700">
+             <div class="px-3 py-6 text-center">
+                ${formattedNotes ? `<div class="w-full bg-amber-500/10 border border-amber-500/30 text-amber-200 p-4 rounded-xl mb-6 text-right text-lg font-bold shadow-sm whitespace-pre-wrap leading-relaxed">📝 ${formattedNotes}</div>` : ''}
+                ${song.rhythm ? `<div class="bg-yellow-500/10 text-yellow-300 font-bold p-2 mb-4 rounded border border-yellow-500/30 text-lg">🎹 מקצב: ${song.rhythm}</div>` : ''}
+
+                ${playerHtml}
+
+                <div class="flex flex-wrap gap-2 justify-center mb-4 mt-2">
+                    <div class="flex justify-center bg-slate-800 p-1.5 rounded-full border border-slate-700 max-w-xs">
+                       <button onclick="switchView('${viewId}', 'lyrics')" id="btn-lyrics-${viewId}" class="flex-1 px-4 py-2 rounded-full font-bold text-sm transition bg-indigo-500 text-white shadow-md mx-1">מילים</button>
+                       <button onclick="switchView('${viewId}', 'chords')" id="btn-chords-${viewId}" class="flex-1 px-4 py-2 rounded-full font-bold text-sm transition text-slate-400 hover:text-white mx-1">אקורדים</button>
+                    </div>
+                    ${song.youtube ? `<a href="${song.youtube}" target="_blank" class="bg-red-600 hover:bg-red-700 text-white px-4 py-3 rounded-full font-bold text-sm shadow-md flex items-center gap-1 transition">📺 יוטיוב</a>` : ''}
+                </div>
+
+                <div id="text-lyrics-${viewId}" class="lyrics-area px-2" dir="rtl">${song.lyrics || '<span class="text-slate-500 text-sm">אין מילים</span>'}</div>
+                <div id="text-chords-${viewId}" class="hidden exact-chord-container px-2">${formatChords(song.chords)}</div>
+             </div>
+          </div>
+        `;
+        list.appendChild(item);
+      });
+
+      if (currentCategory === 'הכל') {
+          sortableInstance = new Sortable(list, {
+              handle: '.drag-handle',
+              animation: 150,
+              disabled: !isAdmin, 
+              ghostClass: 'sortable-ghost',
+              dragClass: 'sortable-drag',
+              onEnd: function (evt) {
+                  const newOrderIds = Array.from(list.children).map(item => item.getAttribute('data-id'));
+                  toggleLoader(true);
+                  fetch(API_URL, {
+                      method: 'POST',
+                      headers: {"Content-Type": "text/plain;charset=utf-8"},
+                      body: JSON.stringify({ action: 'reorder', order: newOrderIds })
+                  }).then(res => res.json()).then(data => {
+                      allSongs = data;
+                      renderList(); 
+                      toggleLoader(false);
+                  });
+              }
+          });
+      }
+    }
+
+    function formatChords(text) {
+      if(!text) return 'אין אקורדים';
+      const lines = text.split('\n');
+      let html = '';
+      const chordRegex = /^[\sA-GmM#bdimsu0-9\/\-\+\(\)]+$/;
+      lines.forEach(line => {
+        if(line.trim() === '') { html += '<br>'; return; }
+        const hasHebrew = /[\u0590-\u05FF]/.test(line);
+        if (!hasHebrew && chordRegex.test(line)) { html += `<span class="chord-line">${line}</span>`; } 
+        else { html += `<span class="lyric-line">${line}</span>`; }
+        html += '\n';
+      });
+      return html;
+    }
+
+    function toggleSong(viewId) {
+      if (document.body.classList.contains('sortable-drag')) return; 
+      const content = document.getElementById(`content-view-${viewId}`);
+      const scrollControl = document.getElementById('autoScrollControl');
+      const isOpen = content.classList.contains('open');
+
+      document.querySelectorAll('.song-content.open').forEach(el => {
+          el.classList.remove('open');
+      });
+
+      if (!isOpen) {
+          content.classList.add('open');
+          scrollControl.classList.add('active'); 
+      } else {
+          scrollControl.classList.remove('active'); 
+          stopScroll();
+      }
+    }
+
+    function switchView(viewId, mode) {
+      const lDiv = document.getElementById(`text-lyrics-${viewId}`);
+      const cDiv = document.getElementById(`text-chords-${viewId}`);
+      const lBtn = document.getElementById(`btn-lyrics-${viewId}`);
+      const cBtn = document.getElementById(`btn-chords-${viewId}`);
+      const activeClass = "bg-indigo-500 text-white shadow-md";
+      const inactiveClass = "text-slate-400 hover:text-white bg-transparent shadow-none";
+
+      if(mode === 'lyrics') {
+        lDiv.classList.remove('hidden'); cDiv.classList.add('hidden');
+        lBtn.className = `flex-1 px-4 py-2 rounded-full font-bold text-sm transition mx-1 ${activeClass}`;
+        cBtn.className = `flex-1 px-4 py-2 rounded-full font-bold text-sm transition mx-1 ${inactiveClass}`;
+      } else {
+        lDiv.classList.add('hidden'); cDiv.classList.remove('hidden');
+        lBtn.className = `flex-1 px-4 py-2 rounded-full font-bold text-sm transition mx-1 ${inactiveClass}`;
+        cBtn.className = `flex-1 px-4 py-2 rounded-full font-bold text-sm transition mx-1 ${activeClass}`;
+      }
+    }
+
+    function openAddModal() {
+      document.body.classList.add('modal-open');
+      document.getElementById('modalTitle').innerText = 'הוספת שיר';
+      document.getElementById('editId').value = ''; 
+      document.querySelectorAll('#modalForm input, #modalForm textarea').forEach(el => el.value = '');
+      document.getElementById('inLyricsDiv').innerHTML = '';
+      setFormTab('lyrics');
+      document.getElementById('modalForm').classList.remove('hidden');
+    }
+
+    function editSongSetup(index) {
+      document.body.classList.add('modal-open');
+      const song = allSongs[index]; 
+      if(!song) return;
+      document.getElementById('modalTitle').innerText = 'עריכת שיר';
+      document.getElementById('editId').value = song.id;
+      document.getElementById('inTitle').value = song.title;
+      document.getElementById('inBpm').value = song.bpm;
+      document.getElementById('inKey').value = song.key;
+      document.getElementById('inTrans').value = song.trans;
+      document.getElementById('inNotes').value = song.notes;
+      document.getElementById('inCategory').value = song.category || '';
+      document.getElementById('inYoutube').value = song.youtube || '';
+      document.getElementById('inRhythm').value = song.rhythm || '';
+      document.getElementById('inPlayback').value = song.playback || '';
+      document.getElementById('inLyricsDiv').innerHTML = song.lyrics;
+      document.getElementById('inChords').value = song.chords;
+      setFormTab('lyrics');
+      document.getElementById('modalForm').classList.remove('hidden');
+    }
+
+    function closeModal() {
+      document.body.classList.remove('modal-open');
+      document.getElementById('modalForm').classList.add('hidden');
+    }
+    
+    function setFormTab(mode) {
+       const l = document.getElementById('editorContainerLyrics');
+       const c = document.getElementById('editorContainerChords');
+       const bl = document.getElementById('btnFormLyrics');
+       const bc = document.getElementById('btnFormChords');
+       const active = "bg-indigo-600 text-white shadow-lg";
+       const inactive = "text-slate-400 hover:text-white";
+       if(mode === 'lyrics') {
+         l.classList.remove('hidden'); c.classList.add('hidden');
+         bl.className = `flex-1 py-2 rounded-full text-sm font-bold transition mx-1 ${active}`;
+         bc.className = `flex-1 py-2 rounded-full text-sm font-bold transition mx-1 ${inactive}`;
+       } else {
+         l.classList.add('hidden'); c.classList.remove('hidden');
+         bl.className = `flex-1 py-2 rounded-full text-sm font-bold transition mx-1 ${inactive}`;
+         bc.className = `flex-1 py-2 rounded-full text-sm font-bold transition mx-1 ${active}`;
+       }
+    }
+
+    function submitForm() {
+      const id = document.getElementById('editId').value;
+      const lyricsHTML = document.getElementById('inLyricsDiv').innerHTML;
+      const payload = {
+        title: document.getElementById('inTitle').value,
+        lyrics: lyricsHTML,
+        chords: document.getElementById('inChords').value,
+        bpm: document.getElementById('inBpm').value,
+        key: document.getElementById('inKey').value,
+        trans: document.getElementById('inTrans').value,
+        notes: document.getElementById('inNotes').value,
+        category: document.getElementById('inCategory').value,
+        youtube: document.getElementById('inYoutube').value,
+        rhythm: document.getElementById('inRhythm').value,
+        playback: document.getElementById('inPlayback').value
+      };
+      if(!payload.title) return alert('חסר שם שיר');
+      closeModal();
+      
+      if(id && id !== "undefined" && id !== "null") { 
+          payload.id = id; 
+          sendData('edit', payload); 
+      } else { 
+          sendData('add', payload); 
+      }
+    }
+
+    function deleteSong(id) {
+      if(confirm('למחוק את השיר?')) {
+        sendData('delete', {id: id});
+      }
+    }
+
+    setInterval(() => {
+        if (document.querySelector('.sortable-drag') || document.body.classList.contains('modal-open')) return;
+
+        fetch(API_URL + "?action=read").then(res => res.json()).then(data => {
+            const currentIds = allSongs.map(s => s.id).join(',');
+            const newIds = data.map(s => s.id).join(',');
+            if (currentIds !== newIds) {
+                allSongs = data;
+                renderCategoryButtons();
+                renderList();
+            }
+        });
+    }, 20000);
+
+  </script>
+</body>
+</html>
