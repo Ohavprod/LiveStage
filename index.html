@@ -80,6 +80,17 @@
 
     .cat-btn { background: #1e293b; color: #94a3b8; border: 1px solid #334155; padding: 8px 20px; border-radius: 999px; font-weight: 700; font-size: 1rem; transition: all 0.2s; white-space: nowrap; flex-shrink: 0; }
     .cat-btn.active { background: #6366f1; color: white; border-color: #6366f1; box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4); transform: scale(1.05); }
+
+    .inst-btn { background: #1e293b; color: #94a3b8; border: 1px solid #334155; padding: 6px 16px; border-radius: 999px; font-weight: 700; font-size: 0.85rem; transition: all 0.2s; white-space: nowrap; flex-shrink: 0; }
+    .inst-btn.active { background: #38bdf8; color: #0f172a; border-color: #38bdf8; box-shadow: 0 4px 12px rgba(56, 189, 248, 0.4); }
+
+    #categoryDropdownBtn { background: #1e293b; color: #f1f5f9; border: 1px solid #334155; padding: 10px 18px; border-radius: 14px; font-weight: 700; font-size: 1rem; display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; transition: all 0.2s; }
+    #categoryDropdownBtn:active { background: #334155; }
+    #categoryDropdownBtn .chev { transition: transform 0.2s; color: #6366f1; }
+    #categoryDropdownBtn.open .chev { transform: rotate(180deg); }
+    #categoryDropdownPanel { max-height: 0; overflow: hidden; transition: max-height 0.25s ease-out; }
+    #categoryDropdownPanel.open { max-height: 400px; overflow-y: auto; }
+    #categoryDropdownPanel .cat-btn { width: 100%; text-align: right; margin-bottom: 6px; }
     
     #loadingOverlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.8); z-index: 100; display: flex; justify-content: center; align-items: center; backdrop-filter: blur(5px); }
     .spinner { width: 50px; height: 50px; border: 5px solid #334155; border-top: 5px solid #6366f1; border-radius: 50%; animation: spin 1s linear infinite; }
@@ -122,7 +133,13 @@
           <button onclick="manualSync()" class="bg-slate-800 border border-slate-700 text-indigo-400 hover:bg-slate-700 active:bg-slate-900 w-10 h-10 rounded-full flex items-center justify-center transition shadow-sm">↻</button>
         </div>
     </div>
-    <div id="categoryFilterBar" class="flex gap-3 overflow-x-auto pb-2 px-1"><button class="cat-btn active">הכל</button></div>
+    <div class="px-1 relative">
+      <button id="categoryDropdownBtn" onclick="toggleCategoryDropdown()">
+        <span id="categoryDropdownLabel">הכל</span>
+        <span class="chev">▾</span>
+      </button>
+      <div id="categoryDropdownPanel" class="mt-2 bg-slate-800 rounded-2xl border border-slate-700 p-2 shadow-xl"></div>
+    </div>
   </header>
 
   <div id="passwordModal" class="hidden fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4 backdrop-blur-sm">
@@ -178,7 +195,13 @@
           <div id="inLyricsDiv" contenteditable="true" class="w-full input-dark rounded-xl p-4 outline-none flex-grow min-h-[150px] transition text-right overflow-y-auto" dir="rtl"></div>
         </div>
         <div id="editorContainerChords" class="hidden h-full">
-           <textarea id="inChords" class="input-dark rounded-xl p-3 outline-none h-[200px] exact-chord-container" placeholder="הדבק כאן..."></textarea>
+           <div class="flex items-center gap-2 mb-2">
+             <div id="instrumentTabBar" class="flex gap-2 overflow-x-auto no-scrollbar flex-grow pb-1"></div>
+             <button type="button" onclick="addInstrumentTab()" class="inst-btn font-black" title="הוסף כלי נגינה">+ כלי</button>
+           </div>
+           <input list="instrumentOptions" id="inInstrumentPicker" class="hidden">
+           <datalist id="instrumentOptions"></datalist>
+           <textarea id="inChords" oninput="onChordTextInput()" class="input-dark rounded-xl p-3 outline-none h-[200px] exact-chord-container" placeholder="הדבק כאן..."></textarea>
         </div>
       </div>
       <div class="grid grid-cols-2 gap-4 mt-6 pt-4 border-t border-slate-700">
@@ -204,6 +227,14 @@
     
     let scrollInterval = null;
     let isScrolling = false;
+    let categoryDropdownOpen = false;
+
+    // --- Multi-instrument chords state (form editor) ---
+    let formChordsByInstrument = {}; // { "קלידים": "...", "בס": "..." }
+    let currentEditInstrument = 'כללי'; // 'כללי' = general/default chords (inChords / song.chords)
+
+    // --- Multi-instrument chords state (per open song card) ---
+    let cardInstrumentChoice = {}; // { viewId: 'כללי' | instrument name }
 
     window.onload = function() {
         loadSongs();
@@ -212,9 +243,23 @@
             var text = (e.originalEvent || e).clipboardData.getData('text/plain');
             document.execCommand('insertText', false, text);
         });
+        // האזנה גלובלית ללחיצות על כפתורי בחירת כלי נגינה (אקורדים)
+        document.getElementById('playlist').addEventListener('click', function(e) {
+            const btn = e.target.closest('.inst-btn');
+            if (!btn) return;
+            e.stopPropagation();
+            const viewId = btn.getAttribute('data-view-id');
+            const instrument = btn.getAttribute('data-instrument');
+            switchChordInstrument(viewId, instrument);
+        });
     };
 
     // --- NEW: Generate Embedded Player HTML ---
+    function escapeHtml(str) {
+        if (str === null || str === undefined) return '';
+        return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
     function getPlayerHtml(url) {
         if (!url) return '';
         
@@ -363,18 +408,24 @@
                 });
             }
         });
-        const bar = document.getElementById('categoryFilterBar');
-        bar.innerHTML = ''; 
+
+        // עדכון התווית של הכפתור הראשי - מציג רק את הקטגוריה הנוכחית
+        document.getElementById('categoryDropdownLabel').innerText = currentCategory;
+
+        // בניית הפאנל הנפתח עם כל הקטגוריות (מוצג רק בלחיצה)
+        const panel = document.getElementById('categoryDropdownPanel');
+        panel.innerHTML = '';
         const allBtn = createCatBtn('הכל');
         if(currentCategory === 'הכל') allBtn.classList.add('active');
         allBtn.onclick = () => setCategory('הכל');
-        bar.appendChild(allBtn);
+        panel.appendChild(allBtn);
         Array.from(categories).sort().forEach(cat => {
             const btn = createCatBtn(cat);
             if(currentCategory === cat) btn.classList.add('active');
             btn.onclick = () => setCategory(cat);
-            bar.appendChild(btn);
+            panel.appendChild(btn);
         });
+
         const datalist = document.getElementById('categoryOptions');
         datalist.innerHTML = '';
         categories.forEach(cat => {
@@ -391,8 +442,17 @@
         return btn;
     }
 
+    function toggleCategoryDropdown() {
+        categoryDropdownOpen = !categoryDropdownOpen;
+        document.getElementById('categoryDropdownPanel').classList.toggle('open', categoryDropdownOpen);
+        document.getElementById('categoryDropdownBtn').classList.toggle('open', categoryDropdownOpen);
+    }
+
     function setCategory(cat) {
         currentCategory = cat;
+        categoryDropdownOpen = false;
+        document.getElementById('categoryDropdownPanel').classList.remove('open');
+        document.getElementById('categoryDropdownBtn').classList.remove('open');
         renderCategoryButtons(); 
         renderList();
     }
@@ -437,6 +497,23 @@
         // יצירת ה-HTML של הנגן במידה ויש קישור
         const playerHtml = song.playback ? getPlayerHtml(song.playback) : '';
 
+        // --- אקורדים לפי כלי נגינה ---
+        const instMap = parseChordsByInstrument(song);
+        const instKeys = Object.keys(instMap).filter(k => instMap[k] && instMap[k].trim() !== '');
+        const hasGeneral = song.chords && song.chords.trim() !== '';
+        let defaultInst = hasGeneral ? 'כללי' : (instKeys[0] || 'כללי');
+        cardInstrumentChoice[viewId] = defaultInst;
+        let instSelectorHtml = '';
+        if (instKeys.length > 0) {
+            const pills = [];
+            if (hasGeneral) pills.push(`<button type="button" class="inst-btn ${defaultInst==='כללי' ? 'active' : ''}" data-view-id="${viewId}" data-instrument="${escapeHtml('כללי')}">כללי</button>`);
+            instKeys.forEach(k => {
+                pills.push(`<button type="button" class="inst-btn ${defaultInst===k ? 'active' : ''}" data-view-id="${viewId}" data-instrument="${escapeHtml(k)}">${escapeHtml(k)}</button>`);
+            });
+            instSelectorHtml = `<div class="inst-select-bar flex gap-2 overflow-x-auto no-scrollbar justify-center mb-3 px-1">${pills.join('')}</div>`;
+        }
+        const initialChordText = defaultInst === 'כללי' ? song.chords : instMap[defaultInst];
+
         item.innerHTML = `
           <div class="p-4 flex items-center justify-between cursor-pointer select-none relative active:bg-slate-700 transition" onclick="toggleSong(${viewId})">
             <div class="flex items-center gap-4 overflow-hidden">
@@ -474,7 +551,10 @@
                 </div>
 
                 <div id="text-lyrics-${viewId}" class="lyrics-area px-2" dir="rtl">${song.lyrics || '<span class="text-slate-500 text-sm">אין מילים</span>'}</div>
-                <div id="text-chords-${viewId}" class="hidden exact-chord-container px-2">${formatChords(song.chords)}</div>
+                <div id="chords-wrap-${viewId}" class="hidden">
+                    ${instSelectorHtml}
+                    <div id="text-chords-${viewId}" class="exact-chord-container px-2">${formatChords(initialChordText)}</div>
+                </div>
              </div>
           </div>
         `;
@@ -541,7 +621,7 @@
 
     function switchView(viewId, mode) {
       const lDiv = document.getElementById(`text-lyrics-${viewId}`);
-      const cDiv = document.getElementById(`text-chords-${viewId}`);
+      const cDiv = document.getElementById(`chords-wrap-${viewId}`);
       const lBtn = document.getElementById(`btn-lyrics-${viewId}`);
       const cBtn = document.getElementById(`btn-chords-${viewId}`);
       const activeClass = "bg-indigo-500 text-white shadow-md";
@@ -558,12 +638,54 @@
       }
     }
 
+    // --- אקורדים לפי כלי נגינה: עזרים ---
+    function parseChordsByInstrument(song) {
+        if (!song.chordsByInstrument) return {};
+        try {
+            const parsed = JSON.parse(song.chordsByInstrument);
+            return (parsed && typeof parsed === 'object') ? parsed : {};
+        } catch(e) { return {}; }
+    }
+
+    function getOriginalIndexByViewId(viewId) {
+        const filteredSongs = currentCategory === 'הכל'
+            ? allSongs
+            : allSongs.filter(s => {
+                if (!s.category) return false;
+                const cats = s.category.split(',').map(c => c.trim());
+                return cats.includes(currentCategory);
+              });
+        const song = filteredSongs[viewId];
+        return song ? allSongs.findIndex(s => s.id === song.id) : -1;
+    }
+
+    function switchChordInstrument(viewId, instrument) {
+        const song = allSongs[getOriginalIndexByViewId(viewId)];
+        if (!song) return;
+        const instMap = parseChordsByInstrument(song);
+        const text = instrument === 'כללי' ? song.chords : instMap[instrument];
+        const textDiv = document.getElementById(`text-chords-${viewId}`);
+        if (textDiv) textDiv.innerHTML = formatChords(text);
+        cardInstrumentChoice[viewId] = instrument;
+        const wrap = document.getElementById(`chords-wrap-${viewId}`);
+        if (wrap) {
+            wrap.querySelectorAll('.inst-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.getAttribute('data-instrument') === instrument);
+            });
+        }
+    }
+
     function openAddModal() {
       document.body.classList.add('modal-open');
       document.getElementById('modalTitle').innerText = 'הוספת שיר';
       document.getElementById('editId').value = ''; 
       document.querySelectorAll('#modalForm input, #modalForm textarea').forEach(el => el.value = '');
       document.getElementById('inLyricsDiv').innerHTML = '';
+      formGeneralChords = '';
+      formChordsByInstrument = {};
+      currentEditInstrument = 'כללי';
+      renderInstrumentTabBar();
+      refreshInstrumentDatalist();
       setFormTab('lyrics');
       document.getElementById('modalForm').classList.remove('hidden');
     }
@@ -584,9 +706,112 @@
       document.getElementById('inRhythm').value = song.rhythm || '';
       document.getElementById('inPlayback').value = song.playback || '';
       document.getElementById('inLyricsDiv').innerHTML = song.lyrics;
-      document.getElementById('inChords').value = song.chords;
+      formGeneralChords = song.chords || '';
+      formChordsByInstrument = parseChordsByInstrument(song);
+      currentEditInstrument = 'כללי';
+      document.getElementById('inChords').value = formGeneralChords;
+      renderInstrumentTabBar();
+      refreshInstrumentDatalist();
       setFormTab('lyrics');
       document.getElementById('modalForm').classList.remove('hidden');
+    }
+
+    // --- עריכת אקורדים לפי כלי נגינה בטופס ---
+    function saveCurrentTabToMemory() {
+      const text = document.getElementById('inChords').value;
+      if (currentEditInstrument === 'כללי') formGeneralChords = text;
+      else formChordsByInstrument[currentEditInstrument] = text;
+    }
+
+    function onChordTextInput() { saveCurrentTabToMemory(); }
+
+    function switchEditInstrumentTab(instrument) {
+      saveCurrentTabToMemory();
+      currentEditInstrument = instrument;
+      document.getElementById('inChords').value = instrument === 'כללי' ? formGeneralChords : (formChordsByInstrument[instrument] || '');
+      renderInstrumentTabBar();
+    }
+
+    function renderInstrumentTabBar() {
+      const bar = document.getElementById('instrumentTabBar');
+      bar.innerHTML = '';
+      const general = document.createElement('button');
+      general.type = 'button';
+      general.className = 'inst-btn ' + (currentEditInstrument === 'כללי' ? 'active' : '');
+      general.innerText = 'כללי';
+      general.onclick = () => switchEditInstrumentTab('כללי');
+      bar.appendChild(general);
+      Object.keys(formChordsByInstrument).forEach(name => {
+        const wrap = document.createElement('div');
+        wrap.className = 'flex items-center gap-0.5';
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'inst-btn ' + (currentEditInstrument === name ? 'active' : '');
+        btn.innerText = name;
+        btn.onclick = () => switchEditInstrumentTab(name);
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.innerText = '✕';
+        del.title = 'הסר כלי';
+        del.className = 'text-slate-500 hover:text-red-400 px-1 text-xs';
+        del.onclick = (e) => { e.stopPropagation(); removeInstrumentTab(name); };
+        wrap.appendChild(btn);
+        wrap.appendChild(del);
+        bar.appendChild(wrap);
+      });
+    }
+
+    function addInstrumentTab() {
+      const picker = document.getElementById('inInstrumentPicker');
+      picker.classList.remove('hidden');
+      picker.style.cssText = 'display:inline-block; width:150px; flex-shrink:0;';
+      picker.classList.add('input-dark', 'rounded-full', 'px-3', 'py-1.5', 'text-sm');
+      picker.value = '';
+      picker.placeholder = 'שם הכלי...';
+      picker.focus();
+      const finish = () => {
+        picker.removeEventListener('keydown', onKey);
+        picker.removeEventListener('blur', onBlur);
+        confirmAddInstrument();
+      };
+      const onKey = (e) => { if (e.key === 'Enter') { e.preventDefault(); finish(); } if (e.key === 'Escape') { picker.value=''; finish(); } };
+      const onBlur = () => finish();
+      picker.addEventListener('keydown', onKey);
+      picker.addEventListener('blur', onBlur);
+    }
+
+    function confirmAddInstrument() {
+      const picker = document.getElementById('inInstrumentPicker');
+      const name = picker.value.trim();
+      picker.classList.add('hidden');
+      picker.removeAttribute('style');
+      if (!name) return;
+      if (name === 'כללי') { alert('השם "כללי" שמור למערכת, בחר/י שם אחר'); return; }
+      if (!(name in formChordsByInstrument)) formChordsByInstrument[name] = '';
+      switchEditInstrumentTab(name);
+    }
+
+    function removeInstrumentTab(name) {
+      if (!confirm(`להסיר את האקורדים עבור "${name}"?`)) return;
+      delete formChordsByInstrument[name];
+      if (currentEditInstrument === name) currentEditInstrument = 'כללי';
+      renderInstrumentTabBar();
+      document.getElementById('inChords').value = currentEditInstrument === 'כללי' ? formGeneralChords : (formChordsByInstrument[currentEditInstrument] || '');
+    }
+
+    function refreshInstrumentDatalist() {
+      const names = new Set();
+      allSongs.forEach(s => {
+        const map = parseChordsByInstrument(s);
+        Object.keys(map).forEach(k => names.add(k));
+      });
+      const datalist = document.getElementById('instrumentOptions');
+      datalist.innerHTML = '';
+      Array.from(names).sort().forEach(n => {
+        const opt = document.createElement('option');
+        opt.value = n;
+        datalist.appendChild(opt);
+      });
     }
 
     function closeModal() {
@@ -613,12 +838,18 @@
     }
 
     function submitForm() {
+      saveCurrentTabToMemory();
       const id = document.getElementById('editId').value;
       const lyricsHTML = document.getElementById('inLyricsDiv').innerHTML;
+      const cleanInstruments = {};
+      Object.keys(formChordsByInstrument).forEach(k => {
+        if (formChordsByInstrument[k] && formChordsByInstrument[k].trim() !== '') cleanInstruments[k] = formChordsByInstrument[k];
+      });
       const payload = {
         title: document.getElementById('inTitle').value,
         lyrics: lyricsHTML,
-        chords: document.getElementById('inChords').value,
+        chords: formGeneralChords,
+        chordsByInstrument: Object.keys(cleanInstruments).length ? JSON.stringify(cleanInstruments) : '',
         bpm: document.getElementById('inBpm').value,
         key: document.getElementById('inKey').value,
         trans: document.getElementById('inTrans').value,
