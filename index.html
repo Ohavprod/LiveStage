@@ -4,6 +4,16 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Live Stage Pro</title>
+
+  <!-- PWA: אפשרות "הוסף למסך הבית" עם הלוגו של האתר -->
+  <link rel="manifest" href="./manifest.json">
+  <link rel="icon" href="./icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="./apple-touch-icon.png">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Live Stage">
   
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -332,6 +342,10 @@
 
     window.onload = function() {
         loadSongs();
+        // רישום ה-Service Worker כדי לאפשר התקנה כאפליקציה ("הוסף למסך הבית")
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('./sw.js').catch(function(e) { console.error('SW register failed', e); });
+        }
         // מעבר אוטומטי בין מצב מחובר/אופליין לפי מצב הרשת של הדפדפן
         window.addEventListener('online', () => { manualSync(); });
         window.addEventListener('offline', () => { setOfflineMode(true); });
