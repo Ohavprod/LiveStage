@@ -136,13 +136,15 @@
           <div class="flex justify-between text-[10px] font-bold text-slate-400 mb-1 px-1"><span>איטי</span><span>מהירות</span><span>מהיר</span></div>
           <input type="range" id="scrollSpeedSlider" min="1" max="50" value="10" class="w-full" oninput="updateScrollSpeed()">
       </div>
-      <button onclick="toggleMinimizeAutoScroll()" class="text-slate-400 hover:text-white text-lg px-1" title="מזער">–</button>
-      <button onclick="stopScroll()" class="text-slate-400 hover:text-white text-2xl px-2">✕</button>
+      <button onclick="toggleMinimizeAutoScroll()" class="text-slate-400 hover:text-white text-2xl px-2" title="מזער">✕</button>
   </div>
 
   <button id="autoScrollMiniBtn" onclick="toggleMinimizeAutoScroll()" class="hidden fixed bottom-6 left-4 bg-slate-800/95 backdrop-blur-lg w-14 h-14 rounded-full border border-indigo-500/50 shadow-2xl z-40 flex items-center justify-center text-2xl" title="הצג בקרת גלילה">🎚️</button>
 
   <header class="sticky top-0 z-50 bg-slate-900/95 border-b border-slate-700 p-3 shadow-lg rounded-b-2xl">
+    <div id="offlineBanner" class="hidden bg-red-600/90 text-white text-xs font-bold text-center py-1.5 px-3 rounded-full mb-2 flex items-center justify-center gap-2">
+        <span>📴</span><span id="offlineBannerText">במצב אופליין - מוצגים נתונים שמורים</span>
+    </div>
     <div class="flex flex-wrap justify-between items-center gap-y-2 mb-3">
         <div class="flex flex-col items-start gap-1">
           <h1 class="text-2xl font-black tracking-wide bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-sky-400 drop-shadow-sm leading-none">LIVE STAGE</h1>
@@ -258,6 +260,66 @@
     let scrollInterval = null;
     let isScrolling = false;
     let categoryDropdownOpen = false;
+
+    // --- מצב אופליין ---
+    const OFFLINE_SONGS_KEY = 'lsp_offline_songs';
+    const OFFLINE_TS_KEY = 'lsp_offline_ts';
+    let isOfflineMode = false;
+
+    function cacheSongsOffline(songs) {
+        try {
+            localStorage.setItem(OFFLINE_SONGS_KEY, JSON.stringify(songs));
+            localStorage.setItem(OFFLINE_TS_KEY, String(Date.now()));
+        } catch(e) { console.error('offline cache failed', e); }
+    }
+
+    function loadOfflineSongs() {
+        try {
+            const raw = localStorage.getItem(OFFLINE_SONGS_KEY);
+            return raw ? JSON.parse(raw) : null;
+        } catch(e) { return null; }
+    }
+
+    function getOfflineTimestampText() {
+        const ts = localStorage.getItem(OFFLINE_TS_KEY);
+        if (!ts) return '';
+        const d = new Date(parseInt(ts, 10));
+        return d.toLocaleDateString('he-IL') + ' ' + d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+    }
+
+    // מציג/מסתיר את חיווי מצב האופליין (הבאנר למעלה + טקסט הסטטוס בכותרת)
+    function setOfflineMode(offline) {
+        isOfflineMode = offline;
+        const banner = document.getElementById('offlineBanner');
+        const bannerText = document.getElementById('offlineBannerText');
+        const syncEl = document.getElementById('syncStatus');
+        if (offline) {
+            banner.classList.remove('hidden');
+            const t = getOfflineTimestampText();
+            bannerText.innerText = t ? `במצב אופליין - הנתונים מעודכנים לאחרונה מ-${t}` : 'במצב אופליין - אין נתונים שמורים במכשיר';
+            syncEl.innerText = '📴 אופליין';
+            syncEl.classList.add('text-red-400');
+            syncEl.classList.remove('text-slate-400');
+        } else {
+            banner.classList.add('hidden');
+            syncEl.classList.remove('text-red-400');
+            syncEl.classList.add('text-slate-400');
+        }
+    }
+
+    // טוען את מה ששמור מקומית (מהסנכרון האחרון) כשאין רשת
+    function loadFromOfflineCache() {
+        const cached = loadOfflineSongs();
+        setOfflineMode(true);
+        if (cached) {
+            allSongs = cached;
+            renderCategoryButtons();
+            renderList();
+        } else if (!allSongs.length) {
+            document.getElementById('playlist').innerHTML = '<div class="text-center text-slate-400 mt-10 p-8 bg-slate-800/50 rounded-3xl border border-slate-700 shadow-soft">📴 אין חיבור לרשת, ואין עדיין נתונים שמורים במכשיר.</div>';
+        }
+    }
+
     let autoScrollMinimized = false;
     try { autoScrollMinimized = (localStorage.getItem('lsp_autoscroll_min') === '1'); } catch(e) {}
 
@@ -270,6 +332,9 @@
 
     window.onload = function() {
         loadSongs();
+        // מעבר אוטומטי בין מצב מחובר/אופליין לפי מצב הרשת של הדפדפן
+        window.addEventListener('online', () => { manualSync(); });
+        window.addEventListener('offline', () => { setOfflineMode(true); });
         document.getElementById('inLyricsDiv').addEventListener('paste', function(e) {
             e.preventDefault();
             var text = (e.originalEvent || e).clipboardData.getData('text/plain');
@@ -421,24 +486,35 @@
     function sanitizeSongs(songs) { return (songs || []).map(sanitizeSong); }
 
     async function loadSongs() {
+      if (!navigator.onLine) {
+          loadFromOfflineCache();
+          return;
+      }
       document.getElementById('syncStatus').innerText = 'טוען...';
       try {
           const res = await fetch(API_URL + "?action=read");
           const data = await res.json();
           allSongs = sanitizeSongs(data);
+          cacheSongsOffline(allSongs);
+          setOfflineMode(false);
           renderCategoryButtons();
           renderList();
           const now = new Date();
           document.getElementById('syncStatus').innerText = now.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
       } catch (e) {
           console.error(e);
-          document.getElementById('syncStatus').innerText = 'שגיאה';
+          // נכשלה הטעינה מהרשת (לרוב בגלל ניתוק) - נופלים חזרה למה ששמור מקומית
+          loadFromOfflineCache();
       }
     }
     
     function manualSync() { loadSongs(); }
 
     async function sendData(action, payload) {
+        if (!navigator.onLine) {
+            alert('אין חיבור לרשת כרגע - אי אפשר לשמור שינויים במצב אופליין. תוכל/י לערוך שוב כשהחיבור יחזור.');
+            return;
+        }
         toggleLoader(true);
         try {
             const res = await fetch(API_URL, {
@@ -448,11 +524,14 @@
             });
             const data = await res.json();
             allSongs = sanitizeSongs(data);
+            cacheSongsOffline(allSongs);
+            setOfflineMode(false);
             renderCategoryButtons();
             renderList();
         } catch(e) {
-            alert('שגיאת תקשורת');
+            alert('שגיאת תקשורת - ייתכן שאין חיבור לרשת');
             console.error(e);
+            setOfflineMode(true);
         }
         toggleLoader(false);
     }
@@ -1060,16 +1139,20 @@
 
     setInterval(() => {
         if (document.querySelector('.sortable-drag') || document.body.classList.contains('modal-open')) return;
+        if (!navigator.onLine) { setOfflineMode(true); return; }
 
         fetch(API_URL + "?action=read").then(res => res.json()).then(data => {
+            const sanitized = sanitizeSongs(data);
+            cacheSongsOffline(sanitized);
+            if (isOfflineMode) setOfflineMode(false);
             const currentIds = allSongs.map(s => s.id).join(',');
-            const newIds = data.map(s => s.id).join(',');
+            const newIds = sanitized.map(s => s.id).join(',');
             if (currentIds !== newIds) {
-                allSongs = sanitizeSongs(data);
+                allSongs = sanitized;
                 renderCategoryButtons();
                 renderList();
             }
-        });
+        }).catch(() => { setOfflineMode(true); });
     }, 20000);
 
   </script>
