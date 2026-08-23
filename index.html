@@ -203,7 +203,7 @@
           <input type="text" id="inKey" placeholder="סולם" class="input-dark rounded-xl p-3 outline-none text-sm font-semibold">
           <input type="text" id="inTrans" placeholder="טרנספוז'" class="input-dark rounded-xl p-3 outline-none text-sm font-semibold">
         </div>
-        <textarea id="inNotes" rows="2" placeholder="📝 הערות..." class="input-dark w-full rounded-xl p-3 outline-none text-sm font-semibold"></textarea>
+        <textarea id="inNotes" rows="2" placeholder="📝 הערות כלליות (לכל הנגנים, אלא אם הוגדרה הערה ייעודית לכלי מסוים)" class="input-dark w-full rounded-xl p-3 outline-none text-sm font-semibold"></textarea>
         <div class="flex justify-center bg-slate-900 p-2 rounded-full mt-2 border border-slate-700 max-w-sm mx-auto">
            <button type="button" onclick="setFormTab('lyrics')" id="btnFormLyrics" class="flex-1 py-2 rounded-full text-sm font-bold transition bg-indigo-600 text-white shadow-lg mx-1">מילים</button>
            <button type="button" onclick="setFormTab('chords')" id="btnFormChords" class="flex-1 py-2 rounded-full text-sm font-bold transition text-slate-400 hover:text-white mx-1">אקורדים</button>
@@ -230,6 +230,7 @@
              <input type="text" id="inInstKey" oninput="onChordTextInput()" placeholder="סולם (אופציונלי)" class="input-dark rounded-xl p-2 outline-none text-xs font-semibold">
              <input type="text" id="inInstTrans" oninput="onChordTextInput()" placeholder="טרנספוז' (אופציונלי)" class="input-dark rounded-xl p-2 outline-none text-xs font-semibold">
            </div>
+           <textarea id="inInstNotes" oninput="onChordTextInput()" rows="2" class="hidden input-dark w-full rounded-xl p-2 outline-none text-xs font-semibold mb-2" placeholder="📝 הערה ייעודית לכלי הזה (אופציונלי - אם ריק, יוצג ההערה הכללית)"></textarea>
            <textarea id="inChords" oninput="onChordTextInput()" class="input-dark rounded-xl p-3 outline-none h-[200px] exact-chord-container" placeholder="הדבק כאן..."></textarea>
         </div>
       </div>
@@ -583,31 +584,33 @@
         item.setAttribute('data-id', song.id); 
         item.className = "bg-slate-800 rounded-2xl overflow-hidden shadow-soft border border-slate-700 mb-3 transition-all hover:shadow-md hover:border-indigo-500/30";
         
-        const formattedNotes = song.notes ? song.notes.replace(/\n/g, '<br>') : '';
-
         // יצירת ה-HTML של הנגן במידה ויש קישור
         const playerHtml = song.playback ? getPlayerHtml(song.playback) : '';
 
-        // --- אקורדים לפי כלי נגינה ---
+        // --- אקורדים והערות לפי כלי נגינה ---
         const instMap = parseChordsByInstrument(song);
         const instKeys = Object.keys(instMap).filter(k => {
             const entry = instMap[k];
-            const text = (typeof entry === 'string') ? entry : (entry && entry.chords);
-            return text && text.trim() !== '';
+            if (typeof entry === 'string') return entry.trim() !== '';
+            const chordsText = entry && entry.chords;
+            const notesText = entry && entry.notes;
+            return (chordsText && chordsText.trim() !== '') || (notesText && notesText.trim() !== '');
         });
-        const hasGeneral = song.chords && song.chords.trim() !== '';
+        const hasGeneral = (song.chords && song.chords.trim() !== '') || (song.notes && song.notes.trim() !== '');
         let defaultInst = hasGeneral ? 'כללי' : (instKeys[0] || 'כללי');
         cardInstrumentChoice[viewId] = defaultInst;
         let instSelectorHtml = '';
         if (instKeys.length > 0) {
             const pills = [];
-            if (hasGeneral) pills.push(`<button type="button" class="inst-btn ${defaultInst==='כללי' ? 'active' : ''}" data-view-id="${viewId}" data-instrument="${escapeHtml('כללי')}">כללי</button>`);
+            if (hasGeneral) pills.push(`<button type="button" class="inst-btn ${defaultInst==='כללי' ? 'active' : ''}" data-view-id="${viewId}" data-instrument="${escapeHtml('כללי')}">🎤 כללי</button>`);
             instKeys.forEach(k => {
                 pills.push(`<button type="button" class="inst-btn ${defaultInst===k ? 'active' : ''}" data-view-id="${viewId}" data-instrument="${escapeHtml(k)}">${escapeHtml(k)}</button>`);
             });
-            instSelectorHtml = `<div class="inst-select-bar flex gap-2 overflow-x-auto no-scrollbar justify-center mb-3 px-1">${pills.join('')}</div>`;
+            // הבר הזה תמיד גלוי (לא רק בתוך טאב האקורדים) כדי שגם ההערות יתחלפו לפי בחירת הכלי
+            instSelectorHtml = `<div id="inst-select-${viewId}" class="inst-select-bar flex gap-2 overflow-x-auto no-scrollbar justify-center mb-4 px-1">${pills.join('')}</div>`;
         }
         const initialFields = getEffectiveFields(song, defaultInst);
+        const formattedNotes = initialFields.notes ? String(initialFields.notes).replace(/\n/g, '<br>') : '';
 
         item.innerHTML = `
           <div class="p-4 flex items-center justify-between cursor-pointer select-none relative active:bg-slate-700 transition" onclick="toggleSong(${viewId})">
@@ -632,7 +635,8 @@
 
           <div id="content-view-${viewId}" class="song-content bg-slate-900/50 border-t border-slate-700">
              <div class="px-3 py-6 text-center">
-                ${formattedNotes ? `<div class="w-full bg-amber-500/10 border border-amber-500/30 text-amber-200 p-4 rounded-xl mb-6 text-right text-lg font-bold shadow-sm whitespace-pre-wrap leading-relaxed">📝 ${formattedNotes}</div>` : ''}
+                ${instSelectorHtml}
+                <div id="notes-wrap-${viewId}" class="w-full bg-amber-500/10 border border-amber-500/30 text-amber-200 p-4 rounded-xl mb-6 text-right text-lg font-bold shadow-sm whitespace-pre-wrap leading-relaxed ${formattedNotes ? '' : 'hidden'}">📝 <span id="text-notes-${viewId}">${formattedNotes}</span></div>
                 ${song.rhythm ? `<div class="bg-yellow-500/10 text-yellow-300 font-bold p-2 mb-4 rounded border border-yellow-500/30 text-lg">🎹 מקצב: ${escapeHtml(song.rhythm)}</div>` : ''}
 
                 ${playerHtml}
@@ -647,7 +651,6 @@
 
                 <div id="text-lyrics-${viewId}" class="lyrics-area px-2" dir="rtl">${song.lyrics || '<span class="text-slate-500 text-sm">אין מילים</span>'}</div>
                 <div id="chords-wrap-${viewId}" class="hidden">
-                    ${instSelectorHtml}
                     <div id="text-chords-${viewId}" class="exact-chord-container chords-display px-2">${formatChords(initialFields.chords)}</div>
                 </div>
              </div>
@@ -746,17 +749,19 @@
     // תומך גם בפורמט ישן שבו הערך היה מחרוזת אקורדים בלבד.
     function getEffectiveFields(song, instrument) {
         if (instrument === 'כללי' || !instrument) {
-            return { chords: song.chords, bpm: song.bpm, key: song.key, trans: song.trans };
+            return { chords: song.chords, bpm: song.bpm, key: song.key, trans: song.trans, notes: song.notes };
         }
         const map = parseChordsByInstrument(song);
         const entry = map[instrument];
-        if (!entry) return { chords: '', bpm: song.bpm, key: song.key, trans: song.trans };
-        if (typeof entry === 'string') return { chords: entry, bpm: song.bpm, key: song.key, trans: song.trans };
+        if (!entry) return { chords: '', bpm: song.bpm, key: song.key, trans: song.trans, notes: song.notes };
+        if (typeof entry === 'string') return { chords: entry, bpm: song.bpm, key: song.key, trans: song.trans, notes: song.notes };
         return {
             chords: entry.chords || '',
             bpm: (entry.bpm !== undefined && entry.bpm !== '') ? entry.bpm : song.bpm,
             key: (entry.key !== undefined && entry.key !== '') ? entry.key : song.key,
-            trans: (entry.trans !== undefined && entry.trans !== '') ? entry.trans : song.trans
+            trans: (entry.trans !== undefined && entry.trans !== '') ? entry.trans : song.trans,
+            // הערה ייעודית לכלי הנגינה גוברת; אם ריקה - נופלים חזרה להערה הכללית של השיר
+            notes: (entry.notes !== undefined && entry.notes !== '') ? entry.notes : song.notes
         };
     }
 
@@ -790,12 +795,24 @@
         const textDiv = document.getElementById(`text-chords-${viewId}`);
         if (textDiv) textDiv.innerHTML = formatChords(eff.chords);
         cardInstrumentChoice[viewId] = instrument;
-        const wrap = document.getElementById(`chords-wrap-${viewId}`);
-        if (wrap) {
-            wrap.querySelectorAll('.inst-btn').forEach(btn => {
+
+        // עדכון בורר הכלים הפעיל (הבר נמצא עכשיו מחוץ ל-chords-wrap, כדי שיהיה גלוי תמיד)
+        const selBar = document.getElementById(`inst-select-${viewId}`);
+        if (selBar) {
+            selBar.querySelectorAll('.inst-btn').forEach(btn => {
                 btn.classList.toggle('active', btn.getAttribute('data-instrument') === instrument);
             });
         }
+
+        // עדכון ההערות בהתאם לכלי הנגינה שנבחר - זה הלב של הפיצ'ר
+        const notesWrap = document.getElementById(`notes-wrap-${viewId}`);
+        const notesText = document.getElementById(`text-notes-${viewId}`);
+        if (notesWrap && notesText) {
+            const formatted = eff.notes ? String(eff.notes).replace(/\n/g, '<br>') : '';
+            notesText.innerHTML = formatted;
+            notesWrap.classList.toggle('hidden', !formatted);
+        }
+
         // עדכון תגיות BPM / סולם / טרנספוז' בהתאם לכלי הנגינה שנבחר
         updateBadge(viewId, 'bpm', eff.bpm, ' BPM');
         updateBadge(viewId, 'key', eff.key, '');
@@ -847,9 +864,9 @@
     // --- עריכת אקורדים לפי כלי נגינה בטופס ---
     // מנרמל ערך של כלי נגינה לפורמט אחיד { chords, bpm, key, trans } (תומך גם בפורמט ישן שהיה מחרוזת בלבד)
     function normalizeInstrumentEntry(entry) {
-      if (typeof entry === 'string') return { chords: entry, bpm: '', key: '', trans: '' };
-      if (entry && typeof entry === 'object') return { chords: entry.chords || '', bpm: entry.bpm || '', key: entry.key || '', trans: entry.trans || '' };
-      return { chords: '', bpm: '', key: '', trans: '' };
+      if (typeof entry === 'string') return { chords: entry, bpm: '', key: '', trans: '', notes: '' };
+      if (entry && typeof entry === 'object') return { chords: entry.chords || '', bpm: entry.bpm || '', key: entry.key || '', trans: entry.trans || '', notes: entry.notes || '' };
+      return { chords: '', bpm: '', key: '', trans: '', notes: '' };
     }
 
     function saveCurrentTabToMemory() {
@@ -862,6 +879,7 @@
         entry.bpm = document.getElementById('inInstBpm').value;
         entry.key = document.getElementById('inInstKey').value;
         entry.trans = document.getElementById('inInstTrans').value;
+        entry.notes = document.getElementById('inInstNotes').value;
         formChordsByInstrument[currentEditInstrument] = entry;
       }
     }
@@ -870,16 +888,20 @@
 
     function loadCurrentTabIntoForm() {
       const overridesRow = document.getElementById('instrumentOverridesRow');
+      const notesField = document.getElementById('inInstNotes');
       if (currentEditInstrument === 'כללי') {
         document.getElementById('inChords').value = formGeneralChords;
         overridesRow.classList.add('hidden');
+        notesField.classList.add('hidden');
       } else {
         const entry = normalizeInstrumentEntry(formChordsByInstrument[currentEditInstrument]);
         document.getElementById('inChords').value = entry.chords;
         document.getElementById('inInstBpm').value = entry.bpm;
         document.getElementById('inInstKey').value = entry.key;
         document.getElementById('inInstTrans').value = entry.trans;
+        notesField.value = entry.notes;
         overridesRow.classList.remove('hidden');
+        notesField.classList.remove('hidden');
       }
     }
 
@@ -1002,7 +1024,7 @@
       const cleanInstruments = {};
       Object.keys(formChordsByInstrument).forEach(k => {
         const entry = normalizeInstrumentEntry(formChordsByInstrument[k]);
-        const hasAnything = (entry.chords && entry.chords.trim() !== '') || entry.bpm || entry.key || entry.trans;
+        const hasAnything = (entry.chords && entry.chords.trim() !== '') || entry.bpm || entry.key || entry.trans || (entry.notes && entry.notes.trim() !== '');
         if (hasAnything) cleanInstruments[k] = entry;
       });
       const payload = {
