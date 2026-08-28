@@ -283,11 +283,17 @@
              <button type="button" onclick="setChordsInputMode('image')" id="btnChordsModeImage" class="px-3 py-1 rounded-full text-xs font-bold transition">🖼️ תמונה</button>
            </div>
            <div id="chordsTextMode">
-             <div class="editor-toolbar flex gap-1 mb-2 no-scrollbar overflow-x-auto flex-wrap" dir="ltr">
+             <div class="editor-toolbar flex gap-1 mb-2 no-scrollbar overflow-x-auto flex-wrap items-center" dir="ltr">
                 <button type="button" onclick="cleanChordsText()" title="מתקן תווים מוזרים מהדבקה, רווחים מיותרים ושורות ריקות עודפות">🧹 נקה טקסט</button>
-                <button type="button" onclick="undoChordsClean()" title="בטל את הניקוי האחרון">↩️ בטל ניקוי</button>
+                <button type="button" onclick="undoChordsChange()" title="בטל את השינוי האחרון (ניקוי או טרנספוזיציה)">↩️ בטל</button>
                 <button type="button" onclick="adjustChordsFontSize(1)" title="הגדל טקסט">A+</button>
                 <button type="button" onclick="adjustChordsFontSize(-1)" title="הקטן טקסט">A-</button>
+                <span class="w-px h-5 bg-slate-600 mx-1"></span>
+                <button type="button" onclick="transposeChords(-1)" title="הורד חצי טון">-1 🎵</button>
+                <span id="chordsTransposeOffsetLabel" class="text-xs font-black text-indigo-300 px-1 min-w-[24px] text-center inline-block">0</span>
+                <button type="button" onclick="transposeChords(1)" title="העלה חצי טון">🎵 +1</button>
+                <button type="button" onclick="resetChordsTranspose()" title="אפס טרנספוזיציה לסולם המקורי">↺ אפס</button>
+                <button type="button" onclick="toggleChordsAccidentals()" id="btnChordsAccidentals" title="עבור בין תצוגת דיאזים (♯) לתצוגת מולים (♭)">♯ דיאזים</button>
              </div>
              <textarea id="inChords" oninput="onChordTextInput()" class="input-dark rounded-xl p-3 outline-none h-[200px] exact-chord-container" placeholder="הדבק כאן..."></textarea>
              <div class="mt-2">
@@ -401,6 +407,7 @@
 
     window.onload = function() {
         loadSongs();
+        updateChordsAccidentalsBtn(); // מציג את העדפת דיאזים/מולים השמורה מהמכשיר
         // רישום ה-Service Worker כדי לאפשר התקנה כאפליקציה ("הוסף למסך הבית")
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('./sw.js').catch(function(e) { console.error('SW register failed', e); });
@@ -1201,8 +1208,8 @@
 
     function onChordTextInput() { saveCurrentTabToMemory(); refreshChordsLivePreview(); }
 
-    // --- ניקוי/תיקון טקסט אקורדים מודבק, והתאמת גודל טקסט בעריכה ---
-    let lastChordsCleanBackup = null;
+    // --- ניקוי/תיקון טקסט אקורדים מודבק, טרנספוזיציה, והתאמת גודל טקסט בעריכה ---
+    let lastChordsBackup = null;
     let chordsEditorFontSize = 19; // תואם לגודל ברירת המחדל של .exact-chord-container
 
     // מתקן תווים טיפוגרפיים נפוצים מהדבקה (מקפים ארוכים, גרשיים מעוצבים, ♭/♯, רווחים בלתי שבירים,
@@ -1225,15 +1232,15 @@
 
     function cleanChordsText() {
         const ta = document.getElementById('inChords');
-        lastChordsCleanBackup = ta.value;
+        lastChordsBackup = ta.value;
         ta.value = normalizeChordsText(ta.value);
         onChordTextInput();
     }
 
-    function undoChordsClean() {
-        if (lastChordsCleanBackup === null) return;
-        document.getElementById('inChords').value = lastChordsCleanBackup;
-        lastChordsCleanBackup = null;
+    function undoChordsChange() {
+        if (lastChordsBackup === null) return;
+        document.getElementById('inChords').value = lastChordsBackup;
+        lastChordsBackup = null;
         onChordTextInput();
     }
 
@@ -1246,6 +1253,88 @@
         if (preview) preview.style.setProperty('font-size', px, 'important');
     }
 
+    // --- טרנספוזיציה של אקורדים ---
+    let chordsTransposeBaseline = ''; // מצב האקורדים כפי שהיה כשנפתחה הלשונית, לפני טרנספוזיציה
+    let chordsTransposeOffset = 0;
+    let chordsUseFlats = (localStorage.getItem('lsp_chords_use_flats') === '1');
+
+    const NOTE_TO_SEMITONE = {
+        'C':0, 'B#':0, 'C#':1, 'Db':1, 'D':2, 'D#':3, 'Eb':3, 'E':4, 'Fb':4,
+        'F':5, 'E#':5, 'F#':6, 'Gb':6, 'G':7, 'G#':8, 'Ab':8, 'A':9, 'A#':10,
+        'Bb':10, 'B':11, 'Cb':11
+    };
+    const SEMITONE_NAMES_SHARP = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+    const SEMITONE_NAMES_FLAT  = ['C','Db','D','Eb','E','F','Gb','G','Ab','A','Bb','B'];
+
+    // מזהה אקורד בתוך שורת טקסט: תו שורש (A-G) + הרחבה אופציונלית (#/b) + סיומת איכות (m, maj, sus4, 7 וכו')
+    // + בס אופציונלי אחרי לוכסן (D/F#) - עם בדיקה שלא נעצרים באמצע מילה רגילה (כמו "Bridge")
+    const CHORD_TOKEN_REGEX = /\b([A-G])([#b♯♭]?)((?:maj|dim|aug|sus|add|no|[mM#b0-9\+\-°ø])*)(?:\/([A-G])([#b♯♭]?))?(?![a-zA-Z])/g;
+
+    function noteNameToSemitone(letter, accidental) {
+        const norm = (accidental === '♯') ? '#' : (accidental === '♭') ? 'b' : (accidental || '');
+        const key = letter + norm;
+        if (key in NOTE_TO_SEMITONE) return NOTE_TO_SEMITONE[key];
+        return NOTE_TO_SEMITONE[letter];
+    }
+
+    function semitoneToNoteName(idx, useFlats) {
+        const n = ((idx % 12) + 12) % 12;
+        return useFlats ? SEMITONE_NAMES_FLAT[n] : SEMITONE_NAMES_SHARP[n];
+    }
+
+    // מזיז את כל האקורדים בטקסט ב-semitoneShift חצאי טונים (0 = בלי שינוי גובה, רק סיווג מחדש לפי דיאז/במול)
+    function transposeChordsText(text, semitoneShift, useFlats) {
+        if (!text) return text;
+        return text.replace(CHORD_TOKEN_REGEX, (match, root, acc, suffix, bassRoot, bassAcc) => {
+            const rootIdx = noteNameToSemitone(root, acc);
+            let result = semitoneToNoteName(rootIdx + semitoneShift, useFlats) + (suffix || '');
+            if (bassRoot) {
+                const bassIdx = noteNameToSemitone(bassRoot, bassAcc);
+                result += '/' + semitoneToNoteName(bassIdx + semitoneShift, useFlats);
+            }
+            return result;
+        });
+    }
+
+    function updateChordsTransposeLabel() {
+        const label = document.getElementById('chordsTransposeOffsetLabel');
+        if (label) label.innerText = (chordsTransposeOffset > 0 ? '+' : '') + chordsTransposeOffset;
+    }
+
+    function updateChordsAccidentalsBtn() {
+        const btn = document.getElementById('btnChordsAccidentals');
+        if (btn) btn.innerText = chordsUseFlats ? '♭ מולים' : '♯ דיאזים';
+    }
+
+    function transposeChords(step) {
+        const ta = document.getElementById('inChords');
+        lastChordsBackup = ta.value;
+        ta.value = transposeChordsText(ta.value, step, chordsUseFlats);
+        chordsTransposeOffset += step;
+        updateChordsTransposeLabel();
+        onChordTextInput();
+    }
+
+    function resetChordsTranspose() {
+        const ta = document.getElementById('inChords');
+        lastChordsBackup = ta.value;
+        ta.value = chordsTransposeBaseline;
+        chordsTransposeOffset = 0;
+        updateChordsTransposeLabel();
+        onChordTextInput();
+    }
+
+    // מחליף בין תצוגת דיאזים (♯) למולים (♭) - משנה רק את האיות, לא את גובה הצליל בפועל
+    function toggleChordsAccidentals() {
+        chordsUseFlats = !chordsUseFlats;
+        localStorage.setItem('lsp_chords_use_flats', chordsUseFlats ? '1' : '0');
+        const ta = document.getElementById('inChords');
+        lastChordsBackup = ta.value;
+        ta.value = transposeChordsText(ta.value, 0, chordsUseFlats);
+        updateChordsAccidentalsBtn();
+        onChordTextInput();
+    }
+
     function refreshChordsLivePreview() {
         const preview = document.getElementById('chordsLivePreview');
         if (!preview) return;
@@ -1253,8 +1342,9 @@
     }
 
     // --- העלאת מילים/אקורדים כתמונה במקום טקסט ---
-    // גודל תא מקסימלי בגיליון גוגל הוא כ-50,000 תווים; משאירים מרווח ביטחון ודוחסים בהתאם
-    const IMAGE_CELL_SAFE_LIMIT = 45000;
+    // התמונות מועלות אוטומטית ל-Cloudinary; בגיליון נשמר רק קישור (URL), לא התמונה עצמה
+    const CLOUDINARY_CLOUD_NAME = 'kyuk8h1t';
+    const CLOUDINARY_UPLOAD_PRESET = 'livestage_unsigned'; // יש ליצור פריסט "unsigned" בשם הזה בחשבון ה-Cloudinary
 
     function compressImageFile(file, maxDim, quality) {
         return new Promise((resolve, reject) => {
@@ -1280,17 +1370,19 @@
         });
     }
 
-    // דוחס בהדרגה עד שהתמונה נכנסת במגבלת התא בגיליון, כדי שהשמירה לא תיכשל
-    async function processImageForStorage(file) {
-        let maxDim = 1400, quality = 0.72;
-        for (let attempt = 0; attempt < 5; attempt++) {
-            const dataUrl = await compressImageFile(file, maxDim, quality);
-            if (dataUrl.length <= IMAGE_CELL_SAFE_LIMIT) return dataUrl;
-            quality = Math.max(0.3, quality - 0.12);
-            maxDim = Math.round(maxDim * 0.85);
-        }
-        const finalTry = await compressImageFile(file, 700, 0.35);
-        return finalTry.length <= IMAGE_CELL_SAFE_LIMIT ? finalTry : null;
+    // מעלה תמונה (כ-dataURL דחוס) ל-Cloudinary ומחזירה את הקישור המאובטח שנוצר
+    async function uploadImageToCloudinary(dataUrl) {
+        const blob = await (await fetch(dataUrl)).blob();
+        const formData = new FormData();
+        formData.append('file', blob);
+        formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+        const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
+            method: 'POST',
+            body: formData
+        });
+        if (!res.ok) throw new Error('Cloudinary upload failed: ' + res.status);
+        const data = await res.json();
+        return data.secure_url;
     }
 
     function setLyricsInputMode(mode) {
@@ -1312,25 +1404,26 @@
     async function handleLyricsImageChange(e) {
         const file = e.target.files[0];
         if (!file) return;
-        document.getElementById('lyricsImageStatus').innerText = 'מעבד תמונה...';
+        if (!navigator.onLine) {
+            alert('אין חיבור לרשת כרגע - לא ניתן להעלות תמונה במצב אופליין.');
+            e.target.value = '';
+            return;
+        }
+        document.getElementById('lyricsImageStatus').innerText = 'מעלה לענן...';
         try {
-            const dataUrl = await processImageForStorage(file);
-            if (!dataUrl) {
-                alert('התמונה גדולה מדי גם אחרי דחיסה. נסה/י תמונה פשוטה/קטנה יותר, או צילום ברור וממוקד יותר.');
-                document.getElementById('lyricsImageStatus').innerText = '';
-                e.target.value = '';
-                return;
-            }
-            formLyricsImage = dataUrl;
+            const compressed = await compressImageFile(file, 2000, 0.85);
+            const url = await uploadImageToCloudinary(compressed);
+            formLyricsImage = url;
             const preview = document.getElementById('lyricsImagePreview');
-            preview.src = dataUrl;
+            preview.src = url;
             preview.classList.remove('hidden');
             document.getElementById('lyricsImageStatus').innerText = '';
         } catch (err) {
             console.error(err);
-            alert('שגיאה בטעינת התמונה');
+            alert('העלאת התמונה לענן נכשלה. ודא/י שהפריסט "' + CLOUDINARY_UPLOAD_PRESET + '" קיים בחשבון ה-Cloudinary שלך (unsigned), ונסה/י שוב.');
             document.getElementById('lyricsImageStatus').innerText = '';
         }
+        e.target.value = '';
     }
 
     function removeLyricsImage() {
@@ -1345,12 +1438,12 @@
         return normalizeInstrumentEntry(formChordsByInstrument[currentEditInstrument]).chordsImage;
     }
 
-    function setCurrentChordsImage(dataUrl) {
+    function setCurrentChordsImage(url) {
         if (currentEditInstrument === 'כללי') {
-            formGeneralChordsImage = dataUrl;
+            formGeneralChordsImage = url;
         } else {
             const entry = normalizeInstrumentEntry(formChordsByInstrument[currentEditInstrument]);
-            entry.chordsImage = dataUrl;
+            entry.chordsImage = url;
             formChordsByInstrument[currentEditInstrument] = entry;
         }
     }
@@ -1374,25 +1467,26 @@
     async function handleChordsImageChange(e) {
         const file = e.target.files[0];
         if (!file) return;
-        document.getElementById('chordsImageStatus').innerText = 'מעבד תמונה...';
+        if (!navigator.onLine) {
+            alert('אין חיבור לרשת כרגע - לא ניתן להעלות תמונה במצב אופליין.');
+            e.target.value = '';
+            return;
+        }
+        document.getElementById('chordsImageStatus').innerText = 'מעלה לענן...';
         try {
-            const dataUrl = await processImageForStorage(file);
-            if (!dataUrl) {
-                alert('התמונה גדולה מדי גם אחרי דחיסה. נסה/י תמונה פשוטה/קטנה יותר, או צילום ברור וממוקד יותר.');
-                document.getElementById('chordsImageStatus').innerText = '';
-                e.target.value = '';
-                return;
-            }
-            setCurrentChordsImage(dataUrl);
+            const compressed = await compressImageFile(file, 2000, 0.85);
+            const url = await uploadImageToCloudinary(compressed);
+            setCurrentChordsImage(url);
             const preview = document.getElementById('chordsImagePreview');
-            preview.src = dataUrl;
+            preview.src = url;
             preview.classList.remove('hidden');
             document.getElementById('chordsImageStatus').innerText = '';
         } catch (err) {
             console.error(err);
-            alert('שגיאה בטעינת התמונה');
+            alert('העלאת התמונה לענן נכשלה. ודא/י שהפריסט "' + CLOUDINARY_UPLOAD_PRESET + '" קיים בחשבון ה-Cloudinary שלך (unsigned), ונסה/י שוב.');
             document.getElementById('chordsImageStatus').innerText = '';
         }
+        e.target.value = '';
     }
 
     function removeChordsImage() {
@@ -1429,7 +1523,11 @@
         overridesRow.classList.remove('hidden');
         notesField.classList.remove('hidden');
       }
-      lastChordsCleanBackup = null;
+      lastChordsBackup = null;
+      chordsTransposeBaseline = document.getElementById('inChords').value;
+      chordsTransposeOffset = 0;
+      updateChordsTransposeLabel();
+      updateChordsAccidentalsBtn();
       refreshChordsLivePreview();
       // ריענון תצוגת תמונת האקורדים בהתאם לטאב (כללי / כלי נגינה) שנבחר
       const chordsImg = getCurrentChordsImage();
