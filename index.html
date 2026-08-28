@@ -166,15 +166,18 @@
           <button onclick="manualSync()" class="bg-slate-800 border border-slate-700 text-indigo-400 hover:bg-slate-700 active:bg-slate-900 w-10 h-10 rounded-full flex items-center justify-center transition shadow-sm flex-shrink-0">↻</button>
         </div>
     </div>
-    <div class="px-1 relative">
-      <button id="categoryDropdownBtn" onclick="toggleCategoryDropdown()">
-        <div class="flex items-center gap-2">
-          <span class="text-[11px] font-bold text-slate-400">קטגוריה</span>
-          <span id="categoryDropdownLabel" class="bg-violet-600 text-white px-3 py-1 rounded-full font-black text-sm shadow-md">הכל</span>
-        </div>
-        <span class="chev">▾</span>
-      </button>
-      <div id="categoryDropdownPanel"></div>
+    <div class="px-1 flex items-start gap-2">
+      <div class="relative flex-grow">
+        <button id="categoryDropdownBtn" onclick="toggleCategoryDropdown()">
+          <div class="flex items-center gap-2">
+            <span class="text-[11px] font-bold text-slate-400">קטגוריה</span>
+            <span id="categoryDropdownLabel" class="bg-violet-600 text-white px-3 py-1 rounded-full font-black text-sm shadow-md">הכל</span>
+          </div>
+          <span class="chev">▾</span>
+        </button>
+        <div id="categoryDropdownPanel"></div>
+      </div>
+      <button onclick="openCategoryManageModal()" class="admin-controls flex-shrink-0 text-lg bg-slate-800 border border-slate-700 text-slate-400 hover:text-indigo-400 hover:bg-slate-700 rounded-2xl transition items-center justify-center" style="height:44px; width:44px;" title="ניהול קטגוריות">⚙️</button>
     </div>
   </header>
 
@@ -187,6 +190,26 @@
               <button onclick="checkPassword()" class="bg-indigo-600 text-white px-6 py-2 rounded-xl font-bold">פתח</button>
           </div>
       </div>
+  </div>
+
+  <div id="categoryManageModal" class="hidden fixed inset-0 bg-black/80 z-[60] flex items-end sm:items-center justify-center sm:p-4 backdrop-blur-sm">
+    <div class="bg-slate-800 w-full sm:max-w-md sm:rounded-3xl rounded-t-3xl p-5 shadow-2xl max-h-[85vh] overflow-y-auto text-right border border-slate-700">
+      <div class="flex justify-between items-center mb-4 flex-row-reverse">
+          <button onclick="closeCategoryManageModal()" class="text-slate-400 text-2xl p-2 hover:text-white transition bg-slate-700 rounded-full w-10 h-10 flex items-center justify-center">✕</button>
+          <h2 class="text-xl font-bold text-indigo-400">ניהול קטגוריות</h2>
+      </div>
+      <div class="flex gap-2 mb-4">
+          <input type="text" id="newCategoryInput" placeholder="שם קטגוריה חדשה" class="flex-grow input-dark rounded-xl p-3 outline-none font-bold text-violet-400 placeholder-slate-500" onkeydown="if(event.key==='Enter'){event.preventDefault();addEmptyCategory();}">
+          <button onclick="addEmptyCategory()" class="bg-indigo-600 text-white px-4 rounded-xl font-bold flex-shrink-0">➕ הוסף</button>
+      </div>
+      <div id="categoryManageList" class="space-y-2"></div>
+      <p class="text-[11px] text-slate-500 mt-4 leading-relaxed">קטגוריה שמוצגת עם 0 שירים נוספה כאן ידנית ותהיה זמינה לבחירה בעת הוספת שיר. מחיקת קטגוריה שמשויכת לשירים מסירה רק את התיוג מהשירים - השירים עצמם נשארים.</p>
+    </div>
+  </div>
+
+  <div id="imageViewerModal" class="hidden fixed inset-0 bg-black/95 z-[70] flex items-center justify-center p-2" onclick="closeImageViewer()">
+      <img id="imageViewerImg" class="max-w-full max-h-full rounded-lg" src="" alt="תצוגה מוגדלת">
+      <button onclick="closeImageViewer()" class="absolute top-4 left-4 text-white text-2xl bg-black/60 rounded-full w-11 h-11 flex items-center justify-center">✕</button>
   </div>
 
   <div id="modalForm" class="hidden fixed inset-0 bg-black/80 z-[60] flex items-end sm:items-center justify-center sm:p-4 backdrop-blur-sm transition-all">
@@ -221,14 +244,26 @@
            <button type="button" onclick="setFormTab('chords')" id="btnFormChords" class="flex-1 py-2 rounded-full text-sm font-bold transition text-slate-400 hover:text-white mx-1">אקורדים</button>
         </div>
         <div id="editorContainerLyrics" class="flex flex-col h-full">
-          <div class="editor-toolbar flex gap-1 mb-2 no-scrollbar overflow-x-auto" dir="ltr">
-            <button type="button" onclick="execCmd('bold')"><b>B</b></button>
-            <button type="button" onclick="execCmd('fontSize', '5')">A+</button>
-            <button type="button" onclick="execCmd('formatBlock', 'H1')">H1</button>
-            <button type="button" onclick="execCmd('underline')"><u>U</u></button>
-            <button type="button" onclick="execCmd('removeFormat')" title="נקה עיצוב">🧹</button>
+          <div class="flex justify-center gap-2 mb-2">
+            <button type="button" onclick="setLyricsInputMode('text')" id="btnLyricsModeText" class="px-3 py-1 rounded-full text-xs font-bold transition">✍️ טקסט</button>
+            <button type="button" onclick="setLyricsInputMode('image')" id="btnLyricsModeImage" class="px-3 py-1 rounded-full text-xs font-bold transition">🖼️ תמונה</button>
           </div>
-          <div id="inLyricsDiv" contenteditable="true" class="w-full input-dark rounded-xl p-4 outline-none flex-grow min-h-[150px] transition text-right overflow-y-auto" dir="rtl"></div>
+          <div id="lyricsTextMode" class="flex flex-col h-full">
+            <div class="editor-toolbar flex gap-1 mb-2 no-scrollbar overflow-x-auto" dir="ltr">
+              <button type="button" onclick="execCmd('bold')"><b>B</b></button>
+              <button type="button" onclick="execCmd('fontSize', '5')">A+</button>
+              <button type="button" onclick="execCmd('formatBlock', 'H1')">H1</button>
+              <button type="button" onclick="execCmd('underline')"><u>U</u></button>
+              <button type="button" onclick="execCmd('removeFormat')" title="נקה עיצוב">🧹</button>
+            </div>
+            <div id="inLyricsDiv" contenteditable="true" class="w-full input-dark rounded-xl p-4 outline-none flex-grow min-h-[150px] transition text-right overflow-y-auto" dir="rtl"></div>
+          </div>
+          <div id="lyricsImageMode" class="hidden">
+            <input type="file" accept="image/*" id="inLyricsImageFile" onchange="handleLyricsImageChange(event)" class="block w-full text-sm text-slate-300 mb-2">
+            <span id="lyricsImageStatus" class="text-xs text-indigo-400"></span>
+            <img id="lyricsImagePreview" class="hidden max-w-full rounded-xl border border-slate-700 mt-2">
+            <button type="button" onclick="removeLyricsImage()" class="mt-3 text-xs text-red-400 font-bold">🗑️ הסר תמונה</button>
+          </div>
         </div>
         <div id="editorContainerChords" class="hidden h-full">
            <div class="flex items-center gap-2 mb-2">
@@ -243,7 +278,29 @@
              <input type="text" id="inInstTrans" oninput="onChordTextInput()" placeholder="טרנספוז' (אופציונלי)" class="input-dark rounded-xl p-2 outline-none text-xs font-semibold">
            </div>
            <textarea id="inInstNotes" oninput="onChordTextInput()" rows="2" class="hidden input-dark w-full rounded-xl p-2 outline-none text-xs font-semibold mb-2" placeholder="📝 הערה ייעודית לכלי הזה (אופציונלי - אם ריק, יוצג ההערה הכללית)"></textarea>
-           <textarea id="inChords" oninput="onChordTextInput()" class="input-dark rounded-xl p-3 outline-none h-[200px] exact-chord-container" placeholder="הדבק כאן..."></textarea>
+           <div class="flex justify-center gap-2 mb-2">
+             <button type="button" onclick="setChordsInputMode('text')" id="btnChordsModeText" class="px-3 py-1 rounded-full text-xs font-bold transition">✍️ טקסט</button>
+             <button type="button" onclick="setChordsInputMode('image')" id="btnChordsModeImage" class="px-3 py-1 rounded-full text-xs font-bold transition">🖼️ תמונה</button>
+           </div>
+           <div id="chordsTextMode">
+             <div class="editor-toolbar flex gap-1 mb-2 no-scrollbar overflow-x-auto flex-wrap" dir="ltr">
+                <button type="button" onclick="cleanChordsText()" title="מתקן תווים מוזרים מהדבקה, רווחים מיותרים ושורות ריקות עודפות">🧹 נקה טקסט</button>
+                <button type="button" onclick="undoChordsClean()" title="בטל את הניקוי האחרון">↩️ בטל ניקוי</button>
+                <button type="button" onclick="adjustChordsFontSize(1)" title="הגדל טקסט">A+</button>
+                <button type="button" onclick="adjustChordsFontSize(-1)" title="הקטן טקסט">A-</button>
+             </div>
+             <textarea id="inChords" oninput="onChordTextInput()" class="input-dark rounded-xl p-3 outline-none h-[200px] exact-chord-container" placeholder="הדבק כאן..."></textarea>
+             <div class="mt-2">
+                <div class="text-[10px] text-slate-500 mb-1 font-bold">תצוגה מקדימה - כך זה ייראה בהופעה (כחול = אקורד, לבן = מילים):</div>
+                <div id="chordsLivePreview" class="exact-chord-container chords-display bg-slate-900 border border-slate-700 rounded-xl p-3"></div>
+             </div>
+           </div>
+           <div id="chordsImageMode" class="hidden">
+             <input type="file" accept="image/*" id="inChordsImageFile" onchange="handleChordsImageChange(event)" class="block w-full text-sm text-slate-300 mb-2">
+             <span id="chordsImageStatus" class="text-xs text-indigo-400"></span>
+             <img id="chordsImagePreview" class="hidden max-w-full rounded-xl border border-slate-700 mt-2">
+             <button type="button" onclick="removeChordsImage()" class="mt-3 text-xs text-red-400 font-bold">🗑️ הסר תמונה</button>
+           </div>
         </div>
       </div>
       <div class="grid grid-cols-2 gap-4 mt-6 pt-4 border-t border-slate-700">
@@ -336,6 +393,8 @@
     // --- Multi-instrument chords state (form editor) ---
     let formChordsByInstrument = {}; // { "קלידים": "...", "בס": "..." }
     let currentEditInstrument = 'כללי'; // 'כללי' = general/default chords (inChords / song.chords)
+    let formLyricsImage = ''; // תמונת מילים (base64), אם קיימת - מחליפה את טקסט המילים בתצוגה
+    let formGeneralChordsImage = ''; // תמונת אקורדים כללית (עבור הטאב 'כללי')
 
     // --- Multi-instrument chords state (per open song card) ---
     let cardInstrumentChoice = {}; // { viewId: 'כללי' | instrument name }
@@ -353,6 +412,13 @@
             e.preventDefault();
             var text = (e.originalEvent || e).clipboardData.getData('text/plain');
             document.execCommand('insertText', false, text);
+        });
+        // הדבקת אקורדים - מנקה אוטומטית תווים טיפוגרפיים שמגיעים מהדבקה (מקפים ארוכים, גרשיים מעוצבים וכו')
+        // כדי שסיווג האקורד לצבע כחול לא ייכשל בגלל תווים כאלה
+        document.getElementById('inChords').addEventListener('paste', function(e) {
+            e.preventDefault();
+            var text = (e.originalEvent || e).clipboardData.getData('text/plain');
+            document.execCommand('insertText', false, normalizeChordsText(text));
         });
         // האזנה גלובלית ללחיצות על כפתורי בחירת כלי נגינה (אקורדים)
         document.getElementById('playlist').addEventListener('click', function(e) {
@@ -593,6 +659,8 @@
                 });
             }
         });
+        // קטגוריות ריקות שנוספו ידנית דרך ניהול הקטגוריות (נשמרות במכשיר הזה)
+        getExtraCategories().forEach(c => categories.add(c));
 
         // עדכון התווית של הכפתור הראשי - מציג רק את הקטגוריה הנוכחית, בבליטה
         document.getElementById('categoryDropdownLabel').innerText = currentCategory;
@@ -640,6 +708,135 @@
         document.getElementById('categoryDropdownBtn').classList.remove('open');
         renderCategoryButtons(); 
         renderList();
+    }
+
+    // --- ניהול קטגוריות: הוספת קטגוריה ריקה (בלי שיר) ומחיקת קטגוריה שלמה ---
+    // קטגוריות ריקות נשמרות מקומית במכשיר (localStorage), כי בגיליון עצמו קטגוריה קיימת רק כתגית על שיר
+    const EXTRA_CATEGORIES_KEY = 'lsp_extra_categories';
+
+    function getExtraCategories() {
+        try { return JSON.parse(localStorage.getItem(EXTRA_CATEGORIES_KEY) || '[]'); } catch(e) { return []; }
+    }
+
+    function setExtraCategories(list) {
+        try { localStorage.setItem(EXTRA_CATEGORIES_KEY, JSON.stringify(list)); } catch(e) { console.error(e); }
+    }
+
+    function openCategoryManageModal() {
+        document.body.classList.add('modal-open');
+        document.getElementById('newCategoryInput').value = '';
+        renderCategoryManageList();
+        document.getElementById('categoryManageModal').classList.remove('hidden');
+    }
+
+    function closeCategoryManageModal() {
+        document.body.classList.remove('modal-open');
+        document.getElementById('categoryManageModal').classList.add('hidden');
+    }
+
+    function renderCategoryManageList() {
+        const counts = {};
+        allSongs.forEach(s => {
+            if (s.category && s.category.trim() !== '') {
+                s.category.split(',').forEach(p => {
+                    const c = p.trim();
+                    if (c) counts[c] = (counts[c] || 0) + 1;
+                });
+            }
+        });
+        getExtraCategories().forEach(c => { if (!(c in counts)) counts[c] = 0; });
+
+        const container = document.getElementById('categoryManageList');
+        container.innerHTML = '';
+        const names = Object.keys(counts).sort();
+        if (!names.length) {
+            container.innerHTML = '<div class="text-center text-slate-500 text-sm py-4">אין עדיין קטגוריות</div>';
+            return;
+        }
+        names.forEach(name => {
+            const row = document.createElement('div');
+            row.className = 'flex items-center justify-between bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 gap-2';
+
+            const left = document.createElement('div');
+            left.className = 'flex items-center gap-2 overflow-hidden';
+            const nameSpan = document.createElement('span');
+            nameSpan.className = 'font-bold text-violet-300 truncate';
+            nameSpan.innerText = name;
+            const countSpan = document.createElement('span');
+            countSpan.className = 'text-xs text-slate-500 flex-shrink-0';
+            countSpan.innerText = counts[name] + ' שירים';
+            left.appendChild(nameSpan);
+            left.appendChild(countSpan);
+
+            const delBtn = document.createElement('button');
+            delBtn.className = 'text-red-400 hover:text-red-300 font-bold text-sm flex-shrink-0';
+            delBtn.innerText = '🗑️ מחק';
+            delBtn.onclick = () => deleteCategory(name);
+
+            row.appendChild(left);
+            row.appendChild(delBtn);
+            container.appendChild(row);
+        });
+    }
+
+    function addEmptyCategory() {
+        const input = document.getElementById('newCategoryInput');
+        const name = input.value.trim();
+        if (!name) return;
+        const exists = new Set();
+        allSongs.forEach(s => { if (s.category) s.category.split(',').forEach(p => exists.add(p.trim())); });
+        getExtraCategories().forEach(c => exists.add(c));
+        if (exists.has(name)) { alert('הקטגוריה כבר קיימת'); return; }
+        const list = getExtraCategories();
+        list.push(name);
+        setExtraCategories(list);
+        input.value = '';
+        renderCategoryManageList();
+        renderCategoryButtons();
+    }
+
+    async function deleteCategory(name) {
+        const affected = allSongs.filter(s => s.category && s.category.split(',').map(p => p.trim()).includes(name));
+
+        if (affected.length === 0) {
+            // קטגוריה ריקה שנוספה מקומית בלבד - אין שירים לעדכן
+            if (!confirm(`למחוק את הקטגוריה הריקה "${name}"?`)) return;
+            setExtraCategories(getExtraCategories().filter(c => c !== name));
+            renderCategoryManageList();
+            renderCategoryButtons();
+            return;
+        }
+
+        if (!confirm(`הקטגוריה "${name}" משויכת ל-${affected.length} שירים. המחיקה תסיר את התיוג הזה מהשירים (השירים עצמם לא יימחקו). להמשיך?`)) return;
+        if (!navigator.onLine) { alert('אין חיבור לרשת כרגע - אי אפשר לעדכן שירים במצב אופליין.'); return; }
+
+        toggleLoader(true);
+        for (const song of affected) {
+            const newCat = song.category.split(',').map(p => p.trim()).filter(c => c && c !== name).join(', ');
+            const payload = Object.assign({}, song, { category: newCat, id: song.id });
+            try {
+                const res = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { "Content-Type": "text/plain;charset=utf-8" },
+                    body: JSON.stringify({ action: 'edit', payload: payload })
+                });
+                const data = await res.json();
+                allSongs = sanitizeSongs(data);
+                cacheSongsOffline(allSongs);
+            } catch (e) {
+                console.error(e);
+                alert('שגיאה בעדכון השיר "' + song.title + '" - הפעולה הופסקה באמצע');
+                toggleLoader(false);
+                renderCategoryButtons();
+                renderList();
+                renderCategoryManageList();
+                return;
+            }
+        }
+        toggleLoader(false);
+        renderCategoryButtons();
+        renderList();
+        renderCategoryManageList();
     }
 
     function renderList() {
@@ -742,9 +939,9 @@
                     ${song.youtube ? `<a href="${song.youtube}" target="_blank" class="bg-red-600 hover:bg-red-700 text-white px-4 py-3 rounded-full font-bold text-sm shadow-md flex items-center gap-1 transition">📺 יוטיוב</a>` : ''}
                 </div>
 
-                <div id="text-lyrics-${viewId}" class="lyrics-area px-2" dir="rtl">${song.lyrics || '<span class="text-slate-500 text-sm">אין מילים</span>'}</div>
+                <div id="text-lyrics-${viewId}" class="lyrics-area px-2" dir="rtl">${song.lyricsImage ? `<img src="${song.lyricsImage}" class="w-full rounded-xl cursor-zoom-in" onclick="openImageViewer(this.src)" alt="מילים">` : (song.lyrics || '<span class="text-slate-500 text-sm">אין מילים</span>')}</div>
                 <div id="chords-wrap-${viewId}" class="hidden">
-                    <div id="text-chords-${viewId}" class="exact-chord-container chords-display px-2">${formatChords(initialFields.chords)}</div>
+                    <div id="text-chords-${viewId}" class="exact-chord-container chords-display px-2">${initialFields.chordsImage ? `<img src="${initialFields.chordsImage}" class="w-full rounded-xl cursor-zoom-in" onclick="openImageViewer(this.src)" alt="אקורדים">` : formatChords(initialFields.chords)}</div>
                 </div>
              </div>
           </div>
@@ -780,10 +977,13 @@
       if(!text) return 'אין אקורדים';
       const lines = text.split('\n');
       let html = '';
-      const chordRegex = /^[\sA-GmM#bdimsu0-9\/\-\+\(\)]+$/;
+      // כולל את כל האותיות הלטיניות (כדי שסיומות אקורד נפוצות כמו maj/dim/aug/sus/add לא ייכשלו),
+      // וגם תווים טיפוגרפיים נפוצים שמגיעים מהדבקה (מקפים ארוכים, גרשיים מעוצבים, ♭/♯)
+      const chordRegex = /^[\sA-Za-z#0-9\/\-\+\(\)♭♯'"׳״\u2018\u2019\u201C\u201D\u2013\u2014\u2212]+$/;
       lines.forEach(line => {
         if(line.trim() === '') { html += '<br>'; return; }
-        const hasHebrew = /[\u0590-\u05FF]/.test(line);
+        // גרש/גרשיים עברי (׳ ״) הם לרוב סימני פיסוק בתוך שם אקורד ולא הופכים את השורה למילים
+        const hasHebrew = /[\u0590-\u05FF]/.test(line.replace(/[\u05F3\u05F4]/g, ''));
         if (!hasHebrew && chordRegex.test(line)) { html += `<span class="chord-line">${line}</span>`; } 
         else { html += `<span class="lyric-line">${line}</span>`; }
         html += '\n';
@@ -842,19 +1042,20 @@
     // תומך גם בפורמט ישן שבו הערך היה מחרוזת אקורדים בלבד.
     function getEffectiveFields(song, instrument) {
         if (instrument === 'כללי' || !instrument) {
-            return { chords: song.chords, bpm: song.bpm, key: song.key, trans: song.trans, notes: song.notes };
+            return { chords: song.chords, bpm: song.bpm, key: song.key, trans: song.trans, notes: song.notes, chordsImage: song.chordsImage || '' };
         }
         const map = parseChordsByInstrument(song);
         const entry = map[instrument];
-        if (!entry) return { chords: '', bpm: song.bpm, key: song.key, trans: song.trans, notes: song.notes };
-        if (typeof entry === 'string') return { chords: entry, bpm: song.bpm, key: song.key, trans: song.trans, notes: song.notes };
+        if (!entry) return { chords: '', bpm: song.bpm, key: song.key, trans: song.trans, notes: song.notes, chordsImage: '' };
+        if (typeof entry === 'string') return { chords: entry, bpm: song.bpm, key: song.key, trans: song.trans, notes: song.notes, chordsImage: '' };
         return {
             chords: entry.chords || '',
             bpm: (entry.bpm !== undefined && entry.bpm !== '') ? entry.bpm : song.bpm,
             key: (entry.key !== undefined && entry.key !== '') ? entry.key : song.key,
             trans: (entry.trans !== undefined && entry.trans !== '') ? entry.trans : song.trans,
             // הערה ייעודית לכלי הנגינה גוברת; אם ריקה - נופלים חזרה להערה הכללית של השיר
-            notes: (entry.notes !== undefined && entry.notes !== '') ? entry.notes : song.notes
+            notes: (entry.notes !== undefined && entry.notes !== '') ? entry.notes : song.notes,
+            chordsImage: entry.chordsImage || ''
         };
     }
 
@@ -886,7 +1087,11 @@
         if (!song) return;
         const eff = getEffectiveFields(song, instrument);
         const textDiv = document.getElementById(`text-chords-${viewId}`);
-        if (textDiv) textDiv.innerHTML = formatChords(eff.chords);
+        if (textDiv) {
+            textDiv.innerHTML = eff.chordsImage
+                ? `<img src="${eff.chordsImage}" class="w-full rounded-xl cursor-zoom-in" onclick="openImageViewer(this.src)" alt="אקורדים">`
+                : formatChords(eff.chords);
+        }
         cardInstrumentChoice[viewId] = instrument;
 
         // עדכון בורר הכלים הפעיל (הבר נמצא עכשיו מחוץ ל-chords-wrap, כדי שיהיה גלוי תמיד)
@@ -921,6 +1126,11 @@
       formGeneralChords = '';
       formChordsByInstrument = {};
       currentEditInstrument = 'כללי';
+      formLyricsImage = '';
+      formGeneralChordsImage = '';
+      document.getElementById('lyricsImagePreview').src = '';
+      document.getElementById('lyricsImagePreview').classList.add('hidden');
+      setLyricsInputMode('text');
       loadCurrentTabIntoForm();
       renderInstrumentTabBar();
       refreshInstrumentDatalist();
@@ -947,6 +1157,18 @@
       formGeneralChords = song.chords || '';
       formChordsByInstrument = parseChordsByInstrument(song);
       currentEditInstrument = 'כללי';
+      formLyricsImage = song.lyricsImage || '';
+      formGeneralChordsImage = song.chordsImage || '';
+      const lyricsPreview = document.getElementById('lyricsImagePreview');
+      if (formLyricsImage) {
+          lyricsPreview.src = formLyricsImage;
+          lyricsPreview.classList.remove('hidden');
+          setLyricsInputMode('image');
+      } else {
+          lyricsPreview.src = '';
+          lyricsPreview.classList.add('hidden');
+          setLyricsInputMode('text');
+      }
       loadCurrentTabIntoForm();
       renderInstrumentTabBar();
       refreshInstrumentDatalist();
@@ -957,9 +1179,9 @@
     // --- עריכת אקורדים לפי כלי נגינה בטופס ---
     // מנרמל ערך של כלי נגינה לפורמט אחיד { chords, bpm, key, trans } (תומך גם בפורמט ישן שהיה מחרוזת בלבד)
     function normalizeInstrumentEntry(entry) {
-      if (typeof entry === 'string') return { chords: entry, bpm: '', key: '', trans: '', notes: '' };
-      if (entry && typeof entry === 'object') return { chords: entry.chords || '', bpm: entry.bpm || '', key: entry.key || '', trans: entry.trans || '', notes: entry.notes || '' };
-      return { chords: '', bpm: '', key: '', trans: '', notes: '' };
+      if (typeof entry === 'string') return { chords: entry, bpm: '', key: '', trans: '', notes: '', chordsImage: '' };
+      if (entry && typeof entry === 'object') return { chords: entry.chords || '', bpm: entry.bpm || '', key: entry.key || '', trans: entry.trans || '', notes: entry.notes || '', chordsImage: entry.chordsImage || '' };
+      return { chords: '', bpm: '', key: '', trans: '', notes: '', chordsImage: '' };
     }
 
     function saveCurrentTabToMemory() {
@@ -977,7 +1199,218 @@
       }
     }
 
-    function onChordTextInput() { saveCurrentTabToMemory(); }
+    function onChordTextInput() { saveCurrentTabToMemory(); refreshChordsLivePreview(); }
+
+    // --- ניקוי/תיקון טקסט אקורדים מודבק, והתאמת גודל טקסט בעריכה ---
+    let lastChordsCleanBackup = null;
+    let chordsEditorFontSize = 19; // תואם לגודל ברירת המחדל של .exact-chord-container
+
+    // מתקן תווים טיפוגרפיים נפוצים מהדבקה (מקפים ארוכים, גרשיים מעוצבים, ♭/♯, רווחים בלתי שבירים,
+    // תווים בלתי נראים) ומצמצם רווח מיותר - כדי שסיווג האקורדים (כחול) לא ייכשל וההצגה תהיה נקייה
+    function normalizeChordsText(text) {
+        if (!text) return text;
+        return text
+            .replace(/\u00A0/g, ' ')
+            .replace(/[\u200B\uFEFF]/g, '')
+            .replace(/[\u2018\u2019\u05F3]/g, "'")
+            .replace(/[\u201C\u201D\u05F4]/g, '"')
+            .replace(/[\u2013\u2014\u2212]/g, '-')
+            .replace(/♭/g, 'b')
+            .replace(/♯/g, '#')
+            .split('\n')
+            .map(line => line.replace(/[ \t]+$/g, ''))
+            .join('\n')
+            .replace(/\n{3,}/g, '\n\n');
+    }
+
+    function cleanChordsText() {
+        const ta = document.getElementById('inChords');
+        lastChordsCleanBackup = ta.value;
+        ta.value = normalizeChordsText(ta.value);
+        onChordTextInput();
+    }
+
+    function undoChordsClean() {
+        if (lastChordsCleanBackup === null) return;
+        document.getElementById('inChords').value = lastChordsCleanBackup;
+        lastChordsCleanBackup = null;
+        onChordTextInput();
+    }
+
+    function adjustChordsFontSize(delta) {
+        chordsEditorFontSize = Math.min(28, Math.max(12, chordsEditorFontSize + delta));
+        const px = chordsEditorFontSize + 'px';
+        const ta = document.getElementById('inChords');
+        const preview = document.getElementById('chordsLivePreview');
+        if (ta) ta.style.setProperty('font-size', px, 'important');
+        if (preview) preview.style.setProperty('font-size', px, 'important');
+    }
+
+    function refreshChordsLivePreview() {
+        const preview = document.getElementById('chordsLivePreview');
+        if (!preview) return;
+        preview.innerHTML = formatChords(document.getElementById('inChords').value);
+    }
+
+    // --- העלאת מילים/אקורדים כתמונה במקום טקסט ---
+    // גודל תא מקסימלי בגיליון גוגל הוא כ-50,000 תווים; משאירים מרווח ביטחון ודוחסים בהתאם
+    const IMAGE_CELL_SAFE_LIMIT = 45000;
+
+    function compressImageFile(file, maxDim, quality) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    let w = img.width, h = img.height;
+                    if (w > maxDim || h > maxDim) {
+                        if (w >= h) { h = Math.round(h * maxDim / w); w = maxDim; }
+                        else { w = Math.round(w * maxDim / h); h = maxDim; }
+                    }
+                    const canvas = document.createElement('canvas');
+                    canvas.width = w; canvas.height = h;
+                    canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+                    resolve(canvas.toDataURL('image/jpeg', quality));
+                };
+                img.onerror = reject;
+                img.src = e.target.result;
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
+    }
+
+    // דוחס בהדרגה עד שהתמונה נכנסת במגבלת התא בגיליון, כדי שהשמירה לא תיכשל
+    async function processImageForStorage(file) {
+        let maxDim = 1400, quality = 0.72;
+        for (let attempt = 0; attempt < 5; attempt++) {
+            const dataUrl = await compressImageFile(file, maxDim, quality);
+            if (dataUrl.length <= IMAGE_CELL_SAFE_LIMIT) return dataUrl;
+            quality = Math.max(0.3, quality - 0.12);
+            maxDim = Math.round(maxDim * 0.85);
+        }
+        const finalTry = await compressImageFile(file, 700, 0.35);
+        return finalTry.length <= IMAGE_CELL_SAFE_LIMIT ? finalTry : null;
+    }
+
+    function setLyricsInputMode(mode) {
+        const t = document.getElementById('lyricsTextMode');
+        const i = document.getElementById('lyricsImageMode');
+        const bt = document.getElementById('btnLyricsModeText');
+        const bi = document.getElementById('btnLyricsModeImage');
+        const active = 'px-3 py-1 rounded-full text-xs font-bold transition bg-indigo-600 text-white';
+        const inactive = 'px-3 py-1 rounded-full text-xs font-bold transition bg-slate-900 border border-slate-700 text-slate-400';
+        if (mode === 'image') {
+            t.classList.add('hidden'); i.classList.remove('hidden');
+            bi.className = active; bt.className = inactive;
+        } else {
+            t.classList.remove('hidden'); i.classList.add('hidden');
+            bt.className = active; bi.className = inactive;
+        }
+    }
+
+    async function handleLyricsImageChange(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        document.getElementById('lyricsImageStatus').innerText = 'מעבד תמונה...';
+        try {
+            const dataUrl = await processImageForStorage(file);
+            if (!dataUrl) {
+                alert('התמונה גדולה מדי גם אחרי דחיסה. נסה/י תמונה פשוטה/קטנה יותר, או צילום ברור וממוקד יותר.');
+                document.getElementById('lyricsImageStatus').innerText = '';
+                e.target.value = '';
+                return;
+            }
+            formLyricsImage = dataUrl;
+            const preview = document.getElementById('lyricsImagePreview');
+            preview.src = dataUrl;
+            preview.classList.remove('hidden');
+            document.getElementById('lyricsImageStatus').innerText = '';
+        } catch (err) {
+            console.error(err);
+            alert('שגיאה בטעינת התמונה');
+            document.getElementById('lyricsImageStatus').innerText = '';
+        }
+    }
+
+    function removeLyricsImage() {
+        formLyricsImage = '';
+        document.getElementById('lyricsImagePreview').src = '';
+        document.getElementById('lyricsImagePreview').classList.add('hidden');
+        document.getElementById('inLyricsImageFile').value = '';
+    }
+
+    function getCurrentChordsImage() {
+        if (currentEditInstrument === 'כללי') return formGeneralChordsImage;
+        return normalizeInstrumentEntry(formChordsByInstrument[currentEditInstrument]).chordsImage;
+    }
+
+    function setCurrentChordsImage(dataUrl) {
+        if (currentEditInstrument === 'כללי') {
+            formGeneralChordsImage = dataUrl;
+        } else {
+            const entry = normalizeInstrumentEntry(formChordsByInstrument[currentEditInstrument]);
+            entry.chordsImage = dataUrl;
+            formChordsByInstrument[currentEditInstrument] = entry;
+        }
+    }
+
+    function setChordsInputMode(mode) {
+        const t = document.getElementById('chordsTextMode');
+        const i = document.getElementById('chordsImageMode');
+        const bt = document.getElementById('btnChordsModeText');
+        const bi = document.getElementById('btnChordsModeImage');
+        const active = 'px-3 py-1 rounded-full text-xs font-bold transition bg-indigo-600 text-white';
+        const inactive = 'px-3 py-1 rounded-full text-xs font-bold transition bg-slate-900 border border-slate-700 text-slate-400';
+        if (mode === 'image') {
+            t.classList.add('hidden'); i.classList.remove('hidden');
+            bi.className = active; bt.className = inactive;
+        } else {
+            t.classList.remove('hidden'); i.classList.add('hidden');
+            bt.className = active; bi.className = inactive;
+        }
+    }
+
+    async function handleChordsImageChange(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        document.getElementById('chordsImageStatus').innerText = 'מעבד תמונה...';
+        try {
+            const dataUrl = await processImageForStorage(file);
+            if (!dataUrl) {
+                alert('התמונה גדולה מדי גם אחרי דחיסה. נסה/י תמונה פשוטה/קטנה יותר, או צילום ברור וממוקד יותר.');
+                document.getElementById('chordsImageStatus').innerText = '';
+                e.target.value = '';
+                return;
+            }
+            setCurrentChordsImage(dataUrl);
+            const preview = document.getElementById('chordsImagePreview');
+            preview.src = dataUrl;
+            preview.classList.remove('hidden');
+            document.getElementById('chordsImageStatus').innerText = '';
+        } catch (err) {
+            console.error(err);
+            alert('שגיאה בטעינת התמונה');
+            document.getElementById('chordsImageStatus').innerText = '';
+        }
+    }
+
+    function removeChordsImage() {
+        setCurrentChordsImage('');
+        document.getElementById('chordsImagePreview').src = '';
+        document.getElementById('chordsImagePreview').classList.add('hidden');
+        document.getElementById('inChordsImageFile').value = '';
+    }
+
+    function openImageViewer(src) {
+        document.getElementById('imageViewerImg').src = src;
+        document.getElementById('imageViewerModal').classList.remove('hidden');
+    }
+
+    function closeImageViewer() {
+        document.getElementById('imageViewerModal').classList.add('hidden');
+        document.getElementById('imageViewerImg').src = '';
+    }
 
     function loadCurrentTabIntoForm() {
       const overridesRow = document.getElementById('instrumentOverridesRow');
@@ -995,6 +1428,21 @@
         notesField.value = entry.notes;
         overridesRow.classList.remove('hidden');
         notesField.classList.remove('hidden');
+      }
+      lastChordsCleanBackup = null;
+      refreshChordsLivePreview();
+      // ריענון תצוגת תמונת האקורדים בהתאם לטאב (כללי / כלי נגינה) שנבחר
+      const chordsImg = getCurrentChordsImage();
+      const preview = document.getElementById('chordsImagePreview');
+      document.getElementById('inChordsImageFile').value = '';
+      if (chordsImg) {
+          preview.src = chordsImg;
+          preview.classList.remove('hidden');
+          setChordsInputMode('image');
+      } else {
+          preview.src = '';
+          preview.classList.add('hidden');
+          setChordsInputMode('text');
       }
     }
 
@@ -1117,13 +1565,15 @@
       const cleanInstruments = {};
       Object.keys(formChordsByInstrument).forEach(k => {
         const entry = normalizeInstrumentEntry(formChordsByInstrument[k]);
-        const hasAnything = (entry.chords && entry.chords.trim() !== '') || entry.bpm || entry.key || entry.trans || (entry.notes && entry.notes.trim() !== '');
+        const hasAnything = (entry.chords && entry.chords.trim() !== '') || entry.bpm || entry.key || entry.trans || (entry.notes && entry.notes.trim() !== '') || (entry.chordsImage && entry.chordsImage.trim() !== '');
         if (hasAnything) cleanInstruments[k] = entry;
       });
       const payload = {
         title: document.getElementById('inTitle').value,
         lyrics: lyricsHTML,
+        lyricsImage: formLyricsImage || '',
         chords: formGeneralChords,
+        chordsImage: formGeneralChordsImage || '',
         chordsByInstrument: Object.keys(cleanInstruments).length ? JSON.stringify(cleanInstruments) : '',
         bpm: document.getElementById('inBpm').value,
         key: document.getElementById('inKey').value,
