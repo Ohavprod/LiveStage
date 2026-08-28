@@ -293,7 +293,7 @@
                 <span id="chordsTransposeOffsetLabel" class="text-xs font-black text-indigo-300 px-1 min-w-[24px] text-center inline-block">0</span>
                 <button type="button" onclick="transposeChords(1)" title="העלה חצי טון">🎵 +1</button>
                 <button type="button" onclick="resetChordsTranspose()" title="אפס טרנספוזיציה לסולם המקורי">↺ אפס</button>
-                <button type="button" onclick="toggleChordsAccidentals()" id="btnChordsAccidentals" title="עבור בין תצוגת דיאזים (♯) לתצוגת מולים (♭)">♯ דיאזים</button>
+                <button type="button" onclick="toggleChordsAccidentals()" id="btnChordsAccidentals" title="עבור בין תצוגת דיאזים (♯) לתצוגת במולים (♭)">♯ דיאזים</button>
              </div>
              <textarea id="inChords" oninput="onChordTextInput()" class="input-dark rounded-xl p-3 outline-none h-[200px] exact-chord-container" placeholder="הדבק כאן..."></textarea>
              <div class="mt-2">
@@ -1303,7 +1303,7 @@
 
     function updateChordsAccidentalsBtn() {
         const btn = document.getElementById('btnChordsAccidentals');
-        if (btn) btn.innerText = chordsUseFlats ? '♭ מולים' : '♯ דיאזים';
+        if (btn) btn.innerText = chordsUseFlats ? ' במולים' : '♯ דיאזים ♭';
     }
 
     function transposeChords(step) {
