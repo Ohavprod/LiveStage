@@ -435,6 +435,14 @@
         // רישום ה-Service Worker כדי לאפשר התקנה כאפליקציה ("הוסף למסך הבית")
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('./sw.js').catch(function(e) { console.error('SW register failed', e); });
+            // כשגרסה חדשה של האפליקציה משתלטת (אחרי עדכון), רוענן אוטומטית את הדף פעם אחת
+            // כדי שלא יישאר תקוע על גרסה ישנה שנטענה מהמטמון
+            let swRefreshed = false;
+            navigator.serviceWorker.addEventListener('controllerchange', function() {
+                if (swRefreshed) return;
+                swRefreshed = true;
+                window.location.reload();
+            });
         }
         // מעבר אוטומטי בין מצב מחובר/אופליין לפי מצב הרשת של הדפדפן
         window.addEventListener('online', () => { manualSync(); });
