@@ -321,10 +321,10 @@
                   <button type="button" onclick="toggleChordsAccidentals()" id="btnChordsAccidentals" class="transpose-btn accent" title="עבור בין דיאזים (♯) למולים (♭)">♯</button>
                </div>
              </div>
-             <div class="text-[11px] text-amber-300 mb-1 font-bold">👀 ככה זה ייראה בפועל (כחול = אקורד, לבן = מילים, צהוב = הערה בסוגריים) - מתעדכן תוך כדי הקלדה למטה:</div>
-             <div id="chordsLivePreview" class="exact-chord-container chords-display bg-slate-900 border-2 border-indigo-500/50 rounded-xl p-3 mb-3 min-h-[56px]"></div>
              <div class="text-[10px] text-slate-500 mb-1 font-bold">✍️ עריכה:</div>
              <textarea id="inChords" oninput="onChordTextInput()" class="input-dark rounded-xl p-3 outline-none h-[140px] exact-chord-container" placeholder="הדבק כאן..."></textarea>
+             <div class="text-[11px] text-amber-300 mb-1 mt-3 font-bold">👀 ככה זה ייראה בפועל (כחול = אקורד, לבן = מילים, צהוב = הערה בסוגריים) - מתעדכן אוטומטית תוך כדי ההקלדה:</div>
+             <div id="chordsLivePreview" class="exact-chord-container chords-display bg-slate-900 border-2 border-indigo-500/50 rounded-xl p-3 min-h-[56px]"></div>
            </div>
            <div id="chordsImageMode" class="hidden">
              <input type="file" accept="image/*" id="inChordsImageFile" onchange="handleChordsImageChange(event)" class="block w-full text-sm text-slate-300 mb-2">
@@ -1052,9 +1052,14 @@
     }
 
     // מסמן טקסט שנמצא בתוך סוגריים מרובעים [כך] כהערה בולטת בצהוב - גם במילים וגם באקורדים
+    // מסמן טקסט שנמצא בתוך סוגריים מרובעים [כך] כהערה בולטת בצהוב - גם במילים וגם באקורדים.
+    // עובד על הטקסט המלא (לפני חלוקה לשורות) כדי שירידת שורה בתוך הסוגריים לא תבטל את הצביעה -
+    // ירידת שורה כזו בתוך ההערה מומרת ל-<br> כדי שהצביעה תישאר רצופה על פני כל ההערה.
     function highlightBracketNotes(text) {
         if (!text) return text;
-        return text.replace(/\[([^\]<>\n]*)\]/g, '<span class="note-highlight">[$1]</span>');
+        return text.replace(/\[([^\]<>]*)\]/g, (match, inner) => {
+            return `<span class="note-highlight">[${inner.replace(/\n/g, '<br>')}]</span>`;
+        });
     }
 
     function refreshLyricsLivePreview() {
@@ -1066,18 +1071,21 @@
 
     function formatChords(text) {
       if(!text) return 'אין אקורדים';
-      const lines = text.split('\n');
+      // מסמנים הערות בסוגריים על פני הטקסט המלא קודם, כדי שהצביעה תישרד ירידת שורה בתוך הסוגריים
+      const highlighted = highlightBracketNotes(text);
+      const lines = highlighted.split('\n');
       let html = '';
       // כולל את כל האותיות הלטיניות (כדי שסיומות אקורד נפוצות כמו maj/dim/aug/sus/add לא ייכשלו),
       // וגם תווים טיפוגרפיים נפוצים שמגיעים מהדבקה (מקפים ארוכים, גרשיים מעוצבים, ♭/♯)
       const chordRegex = /^[\sA-Za-z#0-9\/\-\+\(\)♭♯'"׳״\u2018\u2019\u201C\u201D\u2013\u2014\u2212]+$/;
       lines.forEach(line => {
         if(line.trim() === '') { html += '<br>'; return; }
+        // לצורך סיווג כלי/מילים בודקים את השורה בלי תגית ה-span/<br> שהוספנו בסימון ההערה
+        const plainForClassification = line.replace(/<span class="note-highlight">/g, '').replace(/<\/span>/g, '').replace(/<br>/g, ' ');
         // גרש/גרשיים עברי (׳ ״) הם לרוב סימני פיסוק בתוך שם אקורד ולא הופכים את השורה למילים
-        const hasHebrew = /[\u0590-\u05FF]/.test(line.replace(/[\u05F3\u05F4]/g, ''));
-        const displayLine = highlightBracketNotes(line);
-        if (!hasHebrew && chordRegex.test(line)) { html += `<span class="chord-line">${displayLine}</span>`; } 
-        else { html += `<span class="lyric-line">${displayLine}</span>`; }
+        const hasHebrew = /[\u0590-\u05FF]/.test(plainForClassification.replace(/[\u05F3\u05F4]/g, ''));
+        if (!hasHebrew && chordRegex.test(plainForClassification)) { html += `<span class="chord-line">${line}</span>`; } 
+        else { html += `<span class="lyric-line">${line}</span>`; }
         html += '\n';
       });
       return html;
