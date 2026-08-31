@@ -1057,8 +1057,9 @@
     // ירידת שורה כזו בתוך ההערה מומרת ל-<br> כדי שהצביעה תישאר רצופה על פני כל ההערה.
     function highlightBracketNotes(text) {
         if (!text) return text;
+        // הסוגריים עצמם הם רק סימון לצורך העריכה - בתצוגה בפועל מוצג רק הטקסט הצבעוני, בלי ה-[ ] עצמם
         return text.replace(/\[([^\]<>]*)\]/g, (match, inner) => {
-            return `<span class="note-highlight">[${inner.replace(/\n/g, '<br>')}]</span>`;
+            return `<span class="note-highlight">${inner.replace(/\n/g, '<br>')}</span>`;
         });
     }
 
