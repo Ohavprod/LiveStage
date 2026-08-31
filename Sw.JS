@@ -1,10 +1,12 @@
 // Service Worker פשוט ל-Live Stage Pro
-// תפקידו היחיד: לאפשר "התקנה כאפליקציה" (PWA) ולשמור במטמון את קבצי האפליקציה עצמה
+// תפקידו: לאפשר "התקנה כאפליקציה" (PWA) ולשמור במטמון את קבצי האפליקציה עצמה
 // (index.html, אייקונים, מניפסט) כדי שהאפליקציה תיפתח גם בלי רשת.
+// אסטרטגיה: "רשת קודם" (network-first) - כל עוד יש חיבור לרשת, תמיד נטען את הגרסה החדשה ביותר
+// מהשרת (לא תקוע על גרסה ישנה מהמטמון); רק כשאין רשת בכלל נופלים חזרה לעותק השמור מהפעם האחרונה.
 // שים לב: בקשות ה-API של גוגל (קריאה/שמירה של השירים) לא מטופלות כאן בכלל -
 // מצב האופליין של הנתונים עצמו מנוהל ב-localStorage בתוך index.html.
 
-const CACHE_NAME = 'livestage-shell-v1';
+const CACHE_NAME = 'livestage-shell-v2';
 const APP_SHELL = [
   './',
   './index.html',
@@ -38,17 +40,14 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return; // לא נוגעים בבקשות חוץ (API, CDN וכו')
 
   event.respondWith(
-    caches.match(req).then((cached) => {
-      const networkFetch = fetch(req)
-        .then((res) => {
-          if (res && res.ok) {
-            const copy = res.clone();
-            caches.open(CACHE_NAME).then((c) => c.put(req, copy));
-          }
-          return res;
-        })
-        .catch(() => cached);
-      return cached || networkFetch;
-    })
+    fetch(req)
+      .then((res) => {
+        if (res && res.ok) {
+          const copy = res.clone();
+          caches.open(CACHE_NAME).then((c) => c.put(req, copy));
+        }
+        return res;
+      })
+      .catch(() => caches.match(req)) // אין רשת - נופלים לעותק השמור האחרון
   );
 });
